@@ -1,16 +1,42 @@
 {
+    "version": "0.2.0",
     "configurations": [
-    {
-        "type": "lldb",
-        "request": "launch",
-        "name": "Cargo run",
-        "cargo": {
-            "args": [
-                "run",
-            ]
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'sslkeylog-processor'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=sslkeylog-processor",
+                    "--package=sslkeylog-processor"
+                ],
+                "filter": {
+                    "name": "sslkeylog-processor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
         },
-        "program": "${cargo:program}",
-        "args": []
-    }
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'sslkeylog-processor'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=sslkeylog-processor",
+                    "--package=sslkeylog-processor"
+                ],
+                "filter": {
+                    "name": "sslkeylog-processor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
     ]
 }
