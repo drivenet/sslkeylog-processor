@@ -1,15 +1,15 @@
 use anyhow::Context;
 use mongodb::bson;
-use std::{fs, io::BufRead, net, str::FromStr, time};
+use std::{fs, io::BufRead, net, path, str::FromStr, time};
 
 fn main() -> anyhow::Result<()> {
     let regex = regex::Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$")?;
-    let db_client = mongodb::sync::Client::with_uri_str("mongodb://localhost/")?;
-    let db = db_client.database("keys").collection("keys");
+    let collection = mongodb::sync::Client::with_uri_str("mongodb://localhost/")?.database("keys").collection("keys");
     let threshold = time::SystemTime::now() + time::Duration::from_secs(60);
-    for entry_name in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flat_map(|f| f)
+    for entry_name in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flat_map(|e| e)
     {
-        let metadata = fs::metadata(&entry_name).with_context(|| format!("Failed to get metadata for entry {:?}", entry_name))?;
+        let entry_name = entry_name.as_path();
+        let metadata = fs::metadata(entry_name).with_context(|| format!("Failed to get metadata for entry {:?}", entry_name))?;
         if !metadata.is_file() {
             continue;
         }
@@ -19,12 +19,13 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
         
-        let file = fs::File::open(&entry_name).with_context(|| format!("Failed to open file {:?}", entry_name))?;
+        let file = fs::File::open(entry_name).with_context(|| format!("Failed to open file {:?}", entry_name))?;
         let reader = std::io::BufReader::new(file);
+        let mut batch: Vec<bson::Document> = Vec::new();
         let mut line_num: u64 = 0;
         for line in reader.lines().map(|l| l.with_context(|| format!("Failed to read line from file {:?}", entry_name))) {
-            let line = line?;
-            let captures = regex.captures(&line).with_context(|| format!("Failed to parse line {:?}:{}\n{}", entry_name, line_num, line))?;
+            let line = &line?;
+            let captures = regex.captures(line).with_context(|| format!("Failed to parse line {:?}:{}\n{}", entry_name, line_num, line))?;
             let timestamp = &captures[1];
             let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp).with_context(|| format!("Invalid timestamp {} at {:?}:{}", timestamp, entry_name, line_num))?.with_timezone(&chrono::Utc);
             let source_ip = &captures[2];
@@ -42,16 +43,25 @@ fn main() -> anyhow::Result<()> {
             let premaster_key = hex::decode(premaster_key).with_context(|| format!("Invalid premaster key {} at {:?}:{}", premaster_key, entry_name, line_num))?;
 
             let mut document = bson::Document::new();
-            document.insert("_id", bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: client_random });
+            document.insert("_id", client_random.to_bson());
             document.insert("s", source_ip.to_bson());
             document.insert("sp", source_port as i32);
             document.insert("d", destination_ip.to_bson());
             document.insert("dp", destination_port as i32);
             document.insert("t", timestamp);
             document.insert("h", sni);
-            document.insert("k", bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: premaster_key });
-            db.insert_one(document,None).with_context(|| format!("Failed to insert record read at {:?}:{}", entry_name, line_num))?;
+            document.insert("k", premaster_key.to_bson());
+            batch.push(document);
+            if batch.len() >= 1000 {
+                write_batch(&collection, batch, entry_name, line_num)?;
+                batch = Vec::new(); 
+            }
+
             line_num += 1;
+        }
+
+        if !batch.is_empty() {
+            write_batch(&collection, batch, entry_name, line_num)?;
         }
 
         println!("{:?}: {}", entry_name, line_num);
@@ -60,14 +70,25 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn write_batch(collection: &mongodb::sync::Collection, batch: Vec<bson::Document>, entry_name: &path::Path, line_num: u64) -> anyhow::Result<()> {
+    collection.insert_many(batch,None).with_context(|| format!("Failed to insert records, last at {:?}:{}", entry_name, line_num))?;
+    Ok(())
+}
+
 trait ToBson {
-    fn to_bson(self) -> bson::Bson;
+    fn to_bson(&self) -> bson::Bson;
+}
+
+impl ToBson for Vec<u8> {
+    fn to_bson(&self) -> bson::Bson {
+        bson::Bson::from(bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: self.to_vec() })
+    }
 }
 
 impl ToBson for net::IpAddr {
-    fn to_bson(self) -> bson::Bson {
+    fn to_bson(&self) -> bson::Bson {
         match self {
-            net::IpAddr::V4(a) => bson::Bson::from(u32::from(a)),
+            net::IpAddr::V4(a) => bson::Bson::from(u32::from(*a)),
             net::IpAddr::V6(a) => bson::Bson::from(bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: a.octets().to_vec() }),
         }
     }
