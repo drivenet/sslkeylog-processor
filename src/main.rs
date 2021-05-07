@@ -1,19 +1,15 @@
-use anyhow::{self, Context};
-use chrono;
-use glob;
-use hex;
+use anyhow::Context;
 use mongodb::bson;
-use regex::Regex;
-use std::{self, fs, io::{self, BufRead}, net, str::FromStr, time};
+use std::{fs, io::BufRead, net, str::FromStr, time};
 
 fn main() -> anyhow::Result<()> {
-    let regex = Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$")?;
+    let regex = regex::Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$")?;
     let db_client = mongodb::sync::Client::with_uri_str("mongodb://localhost/")?;
     let db = db_client.database("keys").collection("keys");
     let threshold = time::SystemTime::now() + time::Duration::from_secs(60);
     for entry_name in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flat_map(|f| f)
     {
-        let metadata = std::fs::metadata(&entry_name).with_context(|| format!("Failed to get metadata for entry {:?}", entry_name))?;
+        let metadata = fs::metadata(&entry_name).with_context(|| format!("Failed to get metadata for entry {:?}", entry_name))?;
         if !metadata.is_file() {
             continue;
         }
@@ -24,7 +20,7 @@ fn main() -> anyhow::Result<()> {
         }
         
         let file = fs::File::open(&entry_name).with_context(|| format!("Failed to open file {:?}", entry_name))?;
-        let reader = io::BufReader::new(file);
+        let reader = std::io::BufReader::new(file);
         let mut line_num: u64 = 0;
         for line in reader.lines().map(|l| l.with_context(|| format!("Failed to read line from file {:?}", entry_name))) {
             let line = line?;
@@ -47,9 +43,9 @@ fn main() -> anyhow::Result<()> {
 
             let mut document = bson::Document::new();
             document.insert("_id", bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: client_random });
-            insert_addr(&mut document, "s", &source_ip);
+            document.insert("s", source_ip.to_bson());
             document.insert("sp", source_port as i32);
-            insert_addr(&mut document, "d", &destination_ip);
+            document.insert("d", destination_ip.to_bson());
             document.insert("dp", destination_port as i32);
             document.insert("t", timestamp);
             document.insert("h", sni);
@@ -64,11 +60,15 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn insert_addr(document: &mut bson::Document, key: &str, addr: &net::IpAddr) {
-    match addr {
-        net::IpAddr::V4(a) => document.insert(key, u32::from(*a)),
-        net::IpAddr::V6(a) => document.insert(key, bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: a.octets().to_vec() }),
-    };
+trait ToBson {
+    fn to_bson(self) -> bson::Bson;
 }
 
-
+impl ToBson for net::IpAddr {
+    fn to_bson(self) -> bson::Bson {
+        match self {
+            net::IpAddr::V4(a) => bson::Bson::from(u32::from(a)),
+            net::IpAddr::V6(a) => bson::Bson::from(bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: a.octets().to_vec() }),
+        }
+    }
+}
