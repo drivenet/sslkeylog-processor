@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
         let mut line_num: u64 = 0;
         for line in reader.lines().map(|l| l.with_context(|| format!("Failed to read line from file {:?}", entry_name))) {
             let line = line?;
-            let captures = regex.captures(&line).with_context(|| format!("Failed to parse line {:?}:{}", entry_name, line_num))?;
+            let captures = regex.captures(&line).with_context(|| format!("Failed to parse line {:?}:{}\n{}", entry_name, line_num, line))?;
             let timestamp = &captures[1];
             let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp).with_context(|| format!("Invalid timestamp {} at {:?}:{}", timestamp, entry_name, line_num))?.with_timezone(&chrono::Utc);
             let source_ip = &captures[2];
@@ -47,7 +47,9 @@ fn main() -> anyhow::Result<()> {
 
             let mut document = bson::Document::new();
             document.insert("_id", bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: client_random });
+            insert_addr(&mut document, "s", &source_ip);
             document.insert("sp", source_port as i32);
+            insert_addr(&mut document, "d", &destination_ip);
             document.insert("dp", destination_port as i32);
             document.insert("t", timestamp);
             document.insert("h", sni);
@@ -56,9 +58,17 @@ fn main() -> anyhow::Result<()> {
             line_num += 1;
         }
 
-        println!("Parsed lines: {}", line_num);
-        break;
+        println!("{:?}: {}", entry_name, line_num);
     }
 
     Ok(())
 }
+
+fn insert_addr(document: &mut bson::Document, key: &str, addr: &net::IpAddr) {
+    match addr {
+        net::IpAddr::V4(a) => document.insert(key, u32::from(*a)),
+        net::IpAddr::V6(a) => document.insert(key, bson::Binary { subtype: bson::spec::BinarySubtype::UserDefined(0), bytes: a.octets().to_vec() }),
+    };
+}
+
+
