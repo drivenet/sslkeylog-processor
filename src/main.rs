@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 use anyhow::Context;
+use chrono::{DateTime, Utc};
 use mongodb::bson;
 use regex::Regex;
 use std::{io::BufRead, net::IpAddr, path::Path, str::FromStr, time::Duration, time::SystemTime};
@@ -23,12 +24,7 @@ fn process_file(
     threshold: SystemTime,
     collection: &mongodb::sync::Collection,
 ) -> anyhow::Result<()> {
-    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$";
-    lazy_static! {
-        static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).unwrap();
-    }
-
-    let entry_name = path.display();
+    let entry_name = &path.display();
 
     let metadata = std::fs::metadata(path)
         .with_context(|| format!("Failed to get metadata for entry {}", entry_name))?;
@@ -53,46 +49,12 @@ fn process_file(
     {
         line_num += 1;
         let context = ParseContext {
-            entry_name: &entry_name,
+            entry_name,
             line_num,
         };
-        let line = &line?;
-        let captures = FILTER_REGEX
-            .captures(line)
-            .with_context(|| format!("Failed to parse line at {}\n{}", context, line))?;
-        let timestamp = &captures[1];
-        let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp)
-            .with_context(|| format!("Invalid timestamp {} at {}", timestamp, context))?
-            .with_timezone(&chrono::Utc);
-        let src_ip = &captures[2];
-        let src_ip = IpAddr::from_str(src_ip)
-            .with_context(|| format!("Invalid source IP address {} at {}", src_ip, context))?;
-        let src_port = &captures[3];
-        let src_port = u16::from_str(src_port)
-            .with_context(|| format!("Invalid source port {} at {}", src_port, context))?;
-        let dst_ip = &captures[4];
-        let dst_ip = IpAddr::from_str(dst_ip)
-            .with_context(|| format!("Invalid destination IP address {} at {}", dst_ip, context))?;
-        let dst_port = &captures[5];
-        let dst_port = u16::from_str(dst_port)
-            .with_context(|| format!("Invalid destination port {} at {}", dst_port, context))?;
-        let sni = &captures[6];
-        let client_random = &captures[7];
-        let client_random = hex::decode(client_random)
-            .with_context(|| format!("Invalid client random {} at {}", client_random, context))?;
-        let premaster_key = &captures[8];
-        let premaster_key = hex::decode(premaster_key)
-            .with_context(|| format!("Invalid premaster key {} at {}", premaster_key, context))?;
 
-        let mut document = bson::Document::new();
-        document.insert("_id", client_random.to_bson());
-        document.insert("s", src_ip.to_bson());
-        document.insert("sp", src_port as i32);
-        document.insert("d", dst_ip.to_bson());
-        document.insert("dp", dst_port as i32);
-        document.insert("t", timestamp);
-        document.insert("h", sni);
-        document.insert("k", premaster_key.to_bson());
+        let record = parse(&line?, &context)?;
+        let document = convert(&record);
         batch.push(document);
 
         const BATCH_SIZE: usize = 1000;
@@ -104,7 +66,7 @@ fn process_file(
 
     if !batch.is_empty() {
         let context = ParseContext {
-            entry_name: &entry_name,
+            entry_name,
             line_num,
         };
         write_batch(&collection, batch, &context)?;
@@ -123,6 +85,75 @@ fn write_batch(
         .insert_many(batch, None)
         .with_context(|| format!("Failed to insert records from {}", context))?;
     Ok(())
+}
+
+fn parse(line: &str, context: &ParseContext) -> anyhow::Result<Record> {
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$";
+    lazy_static! {
+        static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).unwrap();
+    }
+
+    let captures = FILTER_REGEX
+        .captures(line)
+        .with_context(|| format!("Failed to parse line at {}\n{}", context, line))?;
+    let timestamp = &captures[1];
+    let timestamp = DateTime::parse_from_rfc3339(timestamp)
+        .with_context(|| format!("Invalid timestamp {} at {}", timestamp, context))?
+        .with_timezone(&Utc);
+    let src_ip = &captures[2];
+    let src_ip = IpAddr::from_str(src_ip)
+        .with_context(|| format!("Invalid source IP address {} at {}", src_ip, context))?;
+    let src_port = &captures[3];
+    let src_port = u16::from_str(src_port)
+        .with_context(|| format!("Invalid source port {} at {}", src_port, context))?;
+    let dst_ip = &captures[4];
+    let dst_ip = IpAddr::from_str(dst_ip)
+        .with_context(|| format!("Invalid destination IP address {} at {}", dst_ip, context))?;
+    let dst_port = &captures[5];
+    let dst_port = u16::from_str(dst_port)
+        .with_context(|| format!("Invalid destination port {} at {}", dst_port, context))?;
+    let sni = &captures[6];
+    let client_random = &captures[7];
+    let client_random = hex::decode(client_random)
+        .with_context(|| format!("Invalid client random {} at {}", client_random, context))?;
+    let premaster_key = &captures[8];
+    let premaster_key = hex::decode(premaster_key)
+        .with_context(|| format!("Invalid premaster key {} at {}", premaster_key, context))?;
+
+    Ok(Record {
+        timestamp,
+        src_ip,
+        src_port,
+        dst_ip,
+        dst_port,
+        sni: sni.to_string(),
+        client_random,
+        premaster_key,
+    })
+}
+
+fn convert(record: &Record) -> bson::Document {
+    let mut document = bson::Document::new();
+    document.insert("_id", record.client_random.to_bson());
+    document.insert("s", record.src_ip.to_bson());
+    document.insert("sp", record.src_port as i32);
+    document.insert("d", record.dst_ip.to_bson());
+    document.insert("dp", record.dst_port as i32);
+    document.insert("t", record.timestamp);
+    document.insert("h", &record.sni);
+    document.insert("k", record.premaster_key.to_bson());
+    document
+}
+
+struct Record {
+    pub timestamp: DateTime<Utc>,
+    pub src_ip: IpAddr,
+    pub src_port: u16,
+    pub dst_ip: IpAddr,
+    pub dst_port: u16,
+    pub sni: String,
+    pub client_random: Vec<u8>,
+    pub premaster_key: Vec<u8>,
 }
 
 trait ToBson {
