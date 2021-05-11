@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
         .database("keys")
         .collection("keys");
     let threshold = time::SystemTime::now() + time::Duration::from_secs(60);
-    for entry_name in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flat_map(|e| e) {
+    for entry_name in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flatten() {
         let entry_name = entry_name.as_path();
         let metadata = fs::metadata(entry_name)
             .with_context(|| format!("Failed to get metadata for entry {:?}", entry_name))?;
