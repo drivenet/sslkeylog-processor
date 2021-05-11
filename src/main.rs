@@ -1,129 +1,117 @@
+#[macro_use]
+extern crate lazy_static;
+
 use anyhow::Context;
 use mongodb::bson;
-use std::{fs, io::BufRead, net, str::FromStr, time};
+use regex::Regex;
+use std::{io::BufRead, net::IpAddr, path::Path, str::FromStr, time::Duration, time::SystemTime};
 
 fn main() -> anyhow::Result<()> {
-    let regex = regex::Regex::new(
-        r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$",
-    )?;
     let collection = mongodb::sync::Client::with_uri_str("mongodb://localhost/")?
         .database("keys")
         .collection("keys");
-    let threshold = time::SystemTime::now() + time::Duration::from_secs(60);
-    for entry_path in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flatten() {
-        let entry_path = entry_path.as_path();
-        let entry_name = entry_path.display();
-        let metadata = fs::metadata(entry_path)
-            .with_context(|| format!("Failed to get metadata for entry {}", entry_name))?;
-        if !metadata.is_file() {
-            continue;
-        }
-
-        let mtime = metadata
-            .modified()
-            .with_context(|| format!("Failed to get mtime for file {}", entry_name))?;
-        if mtime > threshold {
-            continue;
-        }
-
-        let file = fs::File::open(entry_path)
-            .with_context(|| format!("Failed to open file {}", entry_name))?;
-        let reader = std::io::BufReader::new(file);
-        let mut batch: Vec<bson::Document> = Vec::new();
-        let mut line_num: u64 = 0;
-        for line in reader
-            .lines()
-            .map(|l| l.with_context(|| format!("Failed to read line from file {}", entry_name)))
-        {
-            let context = ParseContext {
-                entry_name: &entry_name,
-                line_num,
-            };
-            let line = &line?;
-            let captures = regex.captures(line).with_context(|| {
-                format!(
-                    "Failed to parse line at {}\n{}",
-                    context, line
-                )
-            })?;
-            let timestamp = &captures[1];
-            let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp)
-                .with_context(|| {
-                    format!(
-                        "Invalid timestamp {} at {}",
-                        timestamp, context
-                    )
-                })?
-                .with_timezone(&chrono::Utc);
-            let source_ip = &captures[2];
-            let source_ip = net::IpAddr::from_str(source_ip).with_context(|| {
-                format!(
-                    "Invalid source IP address {} at {}",
-                    source_ip, context
-                )
-            })?;
-            let source_port = &captures[3];
-            let source_port = u16::from_str(source_port).with_context(|| {
-                format!(
-                    "Invalid source port {} at {}",
-                    source_port, context
-                )
-            })?;
-            let destination_ip = &captures[4];
-            let destination_ip = net::IpAddr::from_str(destination_ip).with_context(|| {
-                format!(
-                    "Invalid destination IP address {} at {}",
-                    destination_ip, context
-                )
-            })?;
-            let destination_port = &captures[5];
-            let destination_port = u16::from_str(destination_port).with_context(|| {
-                format!(
-                    "Invalid destination port {} at {}",
-                    destination_port, context
-                )
-            })?;
-            let sni = &captures[6];
-            let client_random = &captures[7];
-            let client_random = hex::decode(client_random).with_context(|| {
-                format!(
-                    "Invalid client random {} at {}",
-                    client_random, context
-                )
-            })?;
-            let premaster_key = &captures[8];
-            let premaster_key = hex::decode(premaster_key).with_context(|| {
-                format!(
-                    "Invalid premaster key {} at {}",
-                    premaster_key, context
-                )
-            })?;
-
-            let mut document = bson::Document::new();
-            document.insert("_id", client_random.to_bson());
-            document.insert("s", source_ip.to_bson());
-            document.insert("sp", source_port as i32);
-            document.insert("d", destination_ip.to_bson());
-            document.insert("dp", destination_port as i32);
-            document.insert("t", timestamp);
-            document.insert("h", sni);
-            document.insert("k", premaster_key.to_bson());
-            batch.push(document);
-            if batch.len() >= 1000 {
-                write_batch(&collection, batch, &context)?;
-                batch = Vec::new();
-            }
-
-            line_num += 1;
-        }
-
-        if !batch.is_empty() {
-            write_batch(&collection, batch, &ParseContext { entry_name: &entry_name, line_num })?;
-        }
-
-        println!("{}: {}", entry_name, line_num);
+    let threshold = SystemTime::now() + Duration::from_secs(60);
+    for path in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flatten() {
+        process_file(path.as_path(), threshold, &collection)?;
     }
 
+    Ok(())
+}
+
+fn process_file(
+    path: &Path,
+    threshold: SystemTime,
+    collection: &mongodb::sync::Collection,
+) -> anyhow::Result<()> {
+    lazy_static! {
+        static ref FILTER_REGEX: Regex =
+            Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$")
+            .unwrap();
+    }
+    let entry_name = path.display();
+
+    let metadata = std::fs::metadata(path)
+        .with_context(|| format!("Failed to get metadata for entry {}", entry_name))?;
+    if !metadata.is_file() {
+        return Ok(());
+    }
+    let mtime = metadata
+        .modified()
+        .with_context(|| format!("Failed to get mtime for file {}", entry_name))?;
+    if mtime > threshold {
+        return Ok(());
+    }
+
+    let file =
+        std::fs::File::open(path).with_context(|| format!("Failed to open file {}", entry_name))?;
+    let reader = std::io::BufReader::new(file);
+    let mut batch: Vec<bson::Document> = Vec::new();
+    let mut line_num: u64 = 0;
+    for line in reader
+        .lines()
+        .map(|l| l.with_context(|| format!("Failed to read line from file {}", entry_name)))
+    {
+        line_num += 1;
+        let context = ParseContext {
+            entry_name: &entry_name,
+            line_num,
+        };
+        let line = &line?;
+        let captures = FILTER_REGEX
+            .captures(line)
+            .with_context(|| format!("Failed to parse line at {}\n{}", context, line))?;
+        let timestamp = &captures[1];
+        let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp)
+            .with_context(|| format!("Invalid timestamp {} at {}", timestamp, context))?
+            .with_timezone(&chrono::Utc);
+        let src_ip = &captures[2];
+        let src_ip = IpAddr::from_str(src_ip)
+            .with_context(|| format!("Invalid source IP address {} at {}", src_ip, context))?;
+        let sport = &captures[3];
+        let sport = u16::from_str(sport)
+            .with_context(|| format!("Invalid source port {} at {}", sport, context))?;
+        let dst_ip = &captures[4];
+        let dst_ip = IpAddr::from_str(dst_ip)
+            .with_context(|| format!("Invalid destination IP address {} at {}", dst_ip, context))?;
+        let dst_port = &captures[5];
+        let dst_port = u16::from_str(dst_port)
+            .with_context(|| format!("Invalid destination port {} at {}", dst_port, context))?;
+        let sni = &captures[6];
+        let client_random = &captures[7];
+        let client_random = hex::decode(client_random)
+            .with_context(|| format!("Invalid client random {} at {}", client_random, context))?;
+        let premaster_key = &captures[8];
+        let premaster_key = hex::decode(premaster_key)
+            .with_context(|| format!("Invalid premaster key {} at {}", premaster_key, context))?;
+
+        let mut document = bson::Document::new();
+        document.insert("_id", client_random.to_bson());
+        document.insert("s", src_ip.to_bson());
+        document.insert("sp", sport as i32);
+        document.insert("d", dst_ip.to_bson());
+        document.insert("dp", dst_port as i32);
+        document.insert("t", timestamp);
+        document.insert("h", sni);
+        document.insert("k", premaster_key.to_bson());
+        batch.push(document);
+        if batch.len() >= 1000 {
+            write_batch(&collection, batch, &context)?;
+            batch = Vec::new();
+        }
+    }
+
+    if !batch.is_empty() {
+        write_batch(
+            &collection,
+            batch,
+            &ParseContext {
+                entry_name: &entry_name,
+                line_num,
+            },
+        )?;
+    }
+
+    println!("{}: {}", entry_name, line_num);
     Ok(())
 }
 
@@ -132,11 +120,9 @@ fn write_batch(
     batch: Vec<bson::Document>,
     context: &ParseContext,
 ) -> anyhow::Result<()> {
-    collection.insert_many(batch, None).with_context(|| {
-        format!(
-            "Failed to insert records from {}", context
-        )
-    })?;
+    collection
+        .insert_many(batch, None)
+        .with_context(|| format!("Failed to insert records from {}", context))?;
     Ok(())
 }
 
@@ -153,11 +139,11 @@ impl ToBson for Vec<u8> {
     }
 }
 
-impl ToBson for net::IpAddr {
+impl ToBson for IpAddr {
     fn to_bson(&self) -> bson::Bson {
         match self {
-            net::IpAddr::V4(a) => bson::Bson::from(u32::from(*a)),
-            net::IpAddr::V6(a) => bson::Bson::from(bson::Binary {
+            IpAddr::V4(a) => bson::Bson::from(u32::from(*a)),
+            IpAddr::V6(a) => bson::Bson::from(bson::Binary {
                 subtype: bson::spec::BinarySubtype::UserDefined(0),
                 bytes: a.octets().to_vec(),
             }),
