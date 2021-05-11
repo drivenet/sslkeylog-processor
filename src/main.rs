@@ -40,20 +40,28 @@ fn process_file(
 
     let file =
         std::fs::File::open(path).with_context(|| format!("Failed to open file {}", entry_name))?;
-    let reader = std::io::BufReader::new(file);
+    let lines = std::io::BufReader::new(file).lines().map(|l| {
+        l.with_context(|| format!("Failed to read line from file {}", entry_name))
+            .unwrap()
+    });
+    process_lines(lines, entry_name, collection)
+}
+
+fn process_lines(
+    lines: impl IntoIterator<Item = String>,
+    file_name: &impl std::fmt::Display,
+    collection: &mongodb::sync::Collection,
+) -> anyhow::Result<()> {
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
-    for line in reader
-        .lines()
-        .map(|l| l.with_context(|| format!("Failed to read line from file {}", entry_name)))
-    {
+    for line in lines {
         line_num += 1;
         let context = ParseContext {
-            entry_name,
+            file_name,
             line_num,
         };
 
-        let record = parse(&line?, &context)?;
+        let record = parse(&line, &context)?;
         let document = convert(&record);
         batch.push(document);
 
@@ -66,13 +74,13 @@ fn process_file(
 
     if !batch.is_empty() {
         let context = ParseContext {
-            entry_name,
+            file_name,
             line_num,
         };
         write_batch(&collection, batch, &context)?;
     }
 
-    println!("{}: {}", entry_name, line_num);
+    println!("{}: {}", file_name, line_num);
     Ok(())
 }
 
@@ -182,12 +190,12 @@ impl ToBson for IpAddr {
 }
 
 struct ParseContext<'local> {
-    pub entry_name: &'local dyn std::fmt::Display,
+    pub file_name: &'local dyn std::fmt::Display,
     pub line_num: u64,
 }
 
 impl<'local> std::fmt::Display for ParseContext<'local> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}:{}", self.entry_name, self.line_num))
+        f.write_fmt(format_args!("{}:{}", self.file_name, self.line_num))
     }
 }
