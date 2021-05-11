@@ -23,11 +23,11 @@ fn process_file(
     threshold: SystemTime,
     collection: &mongodb::sync::Collection,
 ) -> anyhow::Result<()> {
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$";
     lazy_static! {
-        static ref FILTER_REGEX: Regex =
-            Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$")
-            .unwrap();
+        static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).unwrap();
     }
+
     let entry_name = path.display();
 
     let metadata = std::fs::metadata(path)
@@ -67,9 +67,9 @@ fn process_file(
         let src_ip = &captures[2];
         let src_ip = IpAddr::from_str(src_ip)
             .with_context(|| format!("Invalid source IP address {} at {}", src_ip, context))?;
-        let sport = &captures[3];
-        let sport = u16::from_str(sport)
-            .with_context(|| format!("Invalid source port {} at {}", sport, context))?;
+        let src_port = &captures[3];
+        let src_port = u16::from_str(src_port)
+            .with_context(|| format!("Invalid source port {} at {}", src_port, context))?;
         let dst_ip = &captures[4];
         let dst_ip = IpAddr::from_str(dst_ip)
             .with_context(|| format!("Invalid destination IP address {} at {}", dst_ip, context))?;
@@ -87,28 +87,27 @@ fn process_file(
         let mut document = bson::Document::new();
         document.insert("_id", client_random.to_bson());
         document.insert("s", src_ip.to_bson());
-        document.insert("sp", sport as i32);
+        document.insert("sp", src_port as i32);
         document.insert("d", dst_ip.to_bson());
         document.insert("dp", dst_port as i32);
         document.insert("t", timestamp);
         document.insert("h", sni);
         document.insert("k", premaster_key.to_bson());
         batch.push(document);
-        if batch.len() >= 1000 {
+
+        const BATCH_SIZE: usize = 1000;
+        if batch.len() >= BATCH_SIZE {
             write_batch(&collection, batch, &context)?;
             batch = Vec::new();
         }
     }
 
     if !batch.is_empty() {
-        write_batch(
-            &collection,
-            batch,
-            &ParseContext {
-                entry_name: &entry_name,
-                line_num,
-            },
-        )?;
+        let context = ParseContext {
+            entry_name: &entry_name,
+            line_num,
+        };
+        write_batch(&collection, batch, &context)?;
     }
 
     println!("{}: {}", entry_name, line_num);
