@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
         .collection("keys");
     let threshold = SystemTime::now() + Duration::from_secs(60);
     for path in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flatten() {
-        process_file(path.as_path(), threshold, &collection)?;
+        process_file(&path, threshold, &collection)?;
     }
 
     Ok(())
