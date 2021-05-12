@@ -12,7 +12,7 @@ fn main() -> Result<()> {
     let program = args[0].clone();
 
     let mut opts = getopts::Options::new();
-    opts.reqopt("s", "string", "set connection string", "mongodb://...");
+    opts.reqopt("s", "connection", "set connection string", "mongodb://...");
     opts.reqopt("d", "db", "set database name", "test");
     opts.reqopt("c", "collection", "set collection name", "keys");
     opts.optflag("h", "help", "print this help menu");
