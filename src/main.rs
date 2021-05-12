@@ -12,7 +12,9 @@ fn main() -> Result<()> {
     let program = args[0].clone();
 
     let mut opts = getopts::Options::new();
-    opts.reqopt("c", "connection", "set connection string", "mongodb://...");
+    opts.reqopt("s", "string", "set connection string", "mongodb://...");
+    opts.reqopt("d", "db", "set database name", "test");
+    opts.reqopt("c", "collection", "set collection name", "keys");
     opts.optflag("h", "help", "print this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -26,7 +28,9 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let connection_string = matches.opt_str("c").unwrap();
+    let db_name = matches.opt_str("d").unwrap();
+    let collection_name = matches.opt_str("c").unwrap();
+    let connection_string = matches.opt_str("s").unwrap();
     let patterns = matches.free;
     if patterns.is_empty() {
         print_usage(&program, opts);
@@ -34,8 +38,8 @@ fn main() -> Result<()> {
     };
 
     let collection = mongodb::sync::Client::with_uri_str(&connection_string)?
-        .database("keys")
-        .collection("keys");
+        .database(&db_name)
+        .collection(&collection_name);
     let threshold = SystemTime::now() + Duration::from_secs(60);
     let paths: Vec<_> = if cfg!(windows) {
         let glob_result: Result<Vec<_>, _> = patterns.iter().map(|p| glob::glob(p)).collect();
