@@ -1,29 +1,67 @@
 #[macro_use]
 extern crate lazy_static;
 
-use anyhow::Context;
+use anyhow::{Context, Error, Result};
 use chrono::{DateTime, Utc};
 use mongodb::bson;
 use regex::Regex;
-use std::{io::BufRead, net::IpAddr, path::Path, str::FromStr, time::Duration, time::SystemTime};
+use std::{io::BufRead, net::IpAddr, str::FromStr, time::Duration, time::SystemTime};
 
-fn main() -> anyhow::Result<()> {
-    let collection = mongodb::sync::Client::with_uri_str("mongodb://localhost/")?
+fn main() -> Result<()> {
+    let args: Vec<_> = std::env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = getopts::Options::new();
+    opts.reqopt("c", "connection", "set connection string", "mongodb://...");
+    opts.optflag("h", "help", "print this help menu");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(e) => {
+            print_usage(&program, opts);
+            return Err(Error::from(e));
+        }
+    };
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return Ok(());
+    }
+
+    let connection_string = matches.opt_str("c").unwrap();
+    let patterns = matches.free;
+    if patterns.is_empty() {
+        print_usage(&program, opts);
+        return Err(Error::msg("Missing file names"));
+    };
+
+    let collection = mongodb::sync::Client::with_uri_str(&connection_string)?
         .database("keys")
         .collection("keys");
     let threshold = SystemTime::now() + Duration::from_secs(60);
-    for path in glob::glob(r"C:\Users\xm\Projects\dumps\sslkeylog\nginx-*")?.flatten() {
+    let paths: Vec<_> = if cfg!(windows) {
+        let glob_result: Result<Vec<_>, _> = patterns.iter().map(|p| glob::glob(p)).collect();
+        let globbed_paths: Result<Vec<_>, _> = glob_result?.into_iter().flatten().collect();
+        globbed_paths?.into_iter().collect()
+    } else {
+        patterns.iter().map(std::path::PathBuf::from).collect()
+    };
+
+    for path in paths {
         process_file(&path, threshold, &collection)?;
     }
 
     Ok(())
 }
 
+fn print_usage(program: &str, opts: getopts::Options) {
+    let brief = format!("Usage: {} file1 [file2...fileN] [options]", program);
+    print!("{}", opts.usage(&brief));
+}
+
 fn process_file(
-    path: &Path,
+    path: &std::path::Path,
     threshold: SystemTime,
     collection: &mongodb::sync::Collection,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let entry_name = &path.display();
 
     let metadata = std::fs::metadata(path)

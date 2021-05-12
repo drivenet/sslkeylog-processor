@@ -16,7 +16,11 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "data/*",
+                "-c",
+                "mongodb://localhost/"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
