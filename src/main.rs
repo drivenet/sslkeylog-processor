@@ -166,9 +166,9 @@ fn parse(line: &str, context: &ParseContext) -> anyhow::Result<Record> {
     let client_random = &captures[7];
     let client_random = hex::decode(client_random)
         .with_context(|| format!("Invalid client random {} at {}", client_random, context))?;
-    let premaster_key = &captures[8];
-    let premaster_key = hex::decode(premaster_key)
-        .with_context(|| format!("Invalid premaster key {} at {}", premaster_key, context))?;
+    let premaster = &captures[8];
+    let premaster = hex::decode(premaster)
+        .with_context(|| format!("Invalid premaster secret {} at {}", premaster, context))?;
 
     Ok(Record {
         timestamp,
@@ -178,20 +178,20 @@ fn parse(line: &str, context: &ParseContext) -> anyhow::Result<Record> {
         dst_port,
         sni: sni.to_string(),
         client_random,
-        premaster_key,
+        premaster,
     })
 }
 
 fn convert(record: &Record) -> bson::Document {
     let mut document = bson::Document::new();
     document.insert("_id", record.client_random.to_bson());
-    document.insert("s", record.src_ip.to_bson());
+    document.insert("si", record.src_ip.to_bson());
     document.insert("sp", record.src_port as i32);
-    document.insert("d", record.dst_ip.to_bson());
+    document.insert("di", record.dst_ip.to_bson());
     document.insert("dp", record.dst_port as i32);
     document.insert("t", record.timestamp);
     document.insert("h", &record.sni);
-    document.insert("k", record.premaster_key.to_bson());
+    document.insert("p", record.premaster.to_bson());
     document
 }
 
@@ -203,7 +203,7 @@ struct Record {
     pub dst_port: u16,
     pub sni: String,
     pub client_random: Vec<u8>,
-    pub premaster_key: Vec<u8>,
+    pub premaster: Vec<u8>,
 }
 
 trait ToBson {
