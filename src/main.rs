@@ -128,10 +128,27 @@ fn write_batch(
     batch: Vec<bson::Document>,
     context: &ParseContext,
 ) -> Result<()> {
-    keys_collection
-        .insert_many(batch, None)
-        .with_context(|| format!("Failed to insert records from {}", context))?;
-    Ok(())
+    let options = mongodb::options::InsertManyOptions::builder()
+        .ordered(false)
+        .build();
+    match keys_collection.insert_many(batch, options) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            if let mongodb::error::ErrorKind::BulkWriteError(failure) = e.kind.as_ref() {
+                if failure
+                    .write_errors
+                    .as_ref()
+                    .map(|w| w.iter().all(|error| error.code == 11000))
+                    .unwrap_or(false)
+                {
+                    return Ok(());
+                }
+            }
+
+            Err(Error::from(e))
+                .with_context(|| format!("Failed to insert records from {}", context))
+        }
+    }
 }
 
 fn parse(line: &str, context: &ParseContext) -> Result<Record> {
