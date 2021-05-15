@@ -90,7 +90,7 @@ fn process_lines(
     lines: impl IntoIterator<Item = String>,
     file_name: &impl std::fmt::Display,
     keys_collection: &mongodb::sync::Collection,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
     for line in lines {
@@ -127,14 +127,14 @@ fn write_batch(
     keys_collection: &mongodb::sync::Collection,
     batch: Vec<bson::Document>,
     context: &ParseContext,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     keys_collection
         .insert_many(batch, None)
         .with_context(|| format!("Failed to insert records from {}", context))?;
     Ok(())
 }
 
-fn parse(line: &str, context: &ParseContext) -> anyhow::Result<Record> {
+fn parse(line: &str, context: &ParseContext) -> Result<Record> {
     const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$";
     lazy_static! {
         static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).unwrap();
