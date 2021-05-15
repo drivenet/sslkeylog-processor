@@ -22,8 +22,6 @@
                 "mongodb://localhost/",
                 "-d",
                 "keys",
-                "-c",
-                "keys",
             ],
             "cwd": "${workspaceFolder}"
         },

@@ -14,7 +14,6 @@ fn main() -> Result<()> {
     let mut opts = getopts::Options::new();
     opts.reqopt("s", "connection", "set connection string", "mongodb://...");
     opts.reqopt("d", "db", "set database name", "test");
-    opts.reqopt("c", "collection", "set collection name", "keys");
     opts.optflag("h", "help", "print this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -29,7 +28,6 @@ fn main() -> Result<()> {
     }
 
     let db_name = matches.opt_str("d").unwrap();
-    let collection_name = matches.opt_str("c").unwrap();
     let connection_string = matches.opt_str("s").unwrap();
     let patterns = matches.free;
     if patterns.is_empty() {
@@ -37,9 +35,8 @@ fn main() -> Result<()> {
         return Err(Error::msg("Missing file names"));
     };
 
-    let collection = mongodb::sync::Client::with_uri_str(&connection_string)?
-        .database(&db_name)
-        .collection(&collection_name);
+    let db = mongodb::sync::Client::with_uri_str(&connection_string)?.database(&db_name);
+    let keys_collection = db.collection("keys");
     let threshold = SystemTime::now() + Duration::from_secs(60);
     let paths: Vec<_> = if cfg!(windows) {
         let glob_result: Result<Vec<_>, _> = patterns.iter().map(|p| glob::glob(p)).collect();
@@ -50,7 +47,7 @@ fn main() -> Result<()> {
     };
 
     for path in paths {
-        process_file(&path, threshold, &collection)?;
+        process_file(&path, threshold, &keys_collection)?;
     }
 
     Ok(())
@@ -64,7 +61,7 @@ fn print_usage(program: &str, opts: getopts::Options) {
 fn process_file(
     path: &std::path::Path,
     threshold: SystemTime,
-    collection: &mongodb::sync::Collection,
+    keys_collection: &mongodb::sync::Collection,
 ) -> Result<()> {
     let entry_name = &path.display();
 
@@ -86,13 +83,13 @@ fn process_file(
         l.with_context(|| format!("Failed to read line from file {}", entry_name))
             .unwrap()
     });
-    process_lines(lines, entry_name, collection)
+    process_lines(lines, entry_name, keys_collection)
 }
 
 fn process_lines(
     lines: impl IntoIterator<Item = String>,
     file_name: &impl std::fmt::Display,
-    collection: &mongodb::sync::Collection,
+    keys_collection: &mongodb::sync::Collection,
 ) -> anyhow::Result<()> {
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
@@ -109,7 +106,7 @@ fn process_lines(
 
         const BATCH_SIZE: usize = 1000;
         if batch.len() >= BATCH_SIZE {
-            write_batch(&collection, batch, &context)?;
+            write_batch(&keys_collection, batch, &context)?;
             batch = Vec::new();
         }
     }
@@ -119,7 +116,7 @@ fn process_lines(
             file_name,
             line_num,
         };
-        write_batch(&collection, batch, &context)?;
+        write_batch(&keys_collection, batch, &context)?;
     }
 
     println!("{}: {}", file_name, line_num);
@@ -127,11 +124,11 @@ fn process_lines(
 }
 
 fn write_batch(
-    collection: &mongodb::sync::Collection,
+    keys_collection: &mongodb::sync::Collection,
     batch: Vec<bson::Document>,
     context: &ParseContext,
 ) -> anyhow::Result<()> {
-    collection
+    keys_collection
         .insert_many(batch, None)
         .with_context(|| format!("Failed to insert records from {}", context))?;
     Ok(())
