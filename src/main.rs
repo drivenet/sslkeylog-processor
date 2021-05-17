@@ -135,11 +135,12 @@ fn write_batch(
         Ok(_) => Ok(()),
         Err(e) => {
             if let mongodb::error::ErrorKind::BulkWriteError(failure) = e.kind.as_ref() {
-                if failure
-                    .write_errors
-                    .as_ref()
-                    .map(|w| w.iter().all(|error| error.code == 11000))
-                    .unwrap_or(false)
+                if failure.write_concern_error.is_none()
+                    && failure
+                        .write_errors
+                        .as_ref()
+                        .map(|e| e.iter().all(|error| error.code == 11000))
+                        .unwrap_or(false)
                 {
                     return Ok(());
                 }
