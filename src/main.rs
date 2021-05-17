@@ -153,7 +153,7 @@ fn write_batch(
 }
 
 fn parse(line: &str, context: &ParseContext) -> Result<Record> {
-    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{2,}) ([0-9a-fA-F]{2,})$";
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,})$";
     lazy_static! {
         static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).unwrap();
     }
@@ -165,58 +165,74 @@ fn parse(line: &str, context: &ParseContext) -> Result<Record> {
     let timestamp = DateTime::parse_from_rfc3339(timestamp)
         .with_context(|| format!("Invalid timestamp {} at {}", timestamp, context))?
         .with_timezone(&Utc);
-    let src_ip = &captures[2];
-    let src_ip = IpAddr::from_str(src_ip)
-        .with_context(|| format!("Invalid source IP address {} at {}", src_ip, context))?;
-    let src_port = &captures[3];
-    let src_port = u16::from_str(src_port)
-        .with_context(|| format!("Invalid source port {} at {}", src_port, context))?;
-    let dst_ip = &captures[4];
-    let dst_ip = IpAddr::from_str(dst_ip)
-        .with_context(|| format!("Invalid destination IP address {} at {}", dst_ip, context))?;
-    let dst_port = &captures[5];
-    let dst_port = u16::from_str(dst_port)
-        .with_context(|| format!("Invalid destination port {} at {}", dst_port, context))?;
+    let client_ip = &captures[2];
+    let client_ip = IpAddr::from_str(client_ip)
+        .with_context(|| format!("Invalid client IP address {} at {}", client_ip, context))?;
+    let client_port = &captures[3];
+    let client_port = u16::from_str(client_port)
+        .with_context(|| format!("Invalid client port {} at {}", client_port, context))?;
+    let server_ip = &captures[4];
+    let server_ip = IpAddr::from_str(server_ip)
+        .with_context(|| format!("Invalid server IP address {} at {}", server_ip, context))?;
+    let server_port = &captures[5];
+    let server_port = u16::from_str(server_port)
+        .with_context(|| format!("Invalid server port {} at {}", server_port, context))?;
     let sni = &captures[6];
-    let client_random = &captures[7];
+    let cipher_id = &captures[7];
+    let cipher_id = u16::from_str_radix(cipher_id, 16)
+        .with_context(|| format!("Invalid cipher id {} at {}", cipher_id, context))?;
+    let server_random = &captures[8];
+    let server_random = hex::decode(server_random)
+        .with_context(|| format!("Invalid server random {} at {}", server_random, context))?;
+    let client_random = &captures[9];
     let client_random = hex::decode(client_random)
         .with_context(|| format!("Invalid client random {} at {}", client_random, context))?;
-    let premaster = &captures[8];
+    let premaster = &captures[10];
     let premaster = hex::decode(premaster)
         .with_context(|| format!("Invalid premaster secret {} at {}", premaster, context))?;
 
     Ok(Record {
         timestamp,
-        src_ip,
-        src_port,
-        dst_ip,
-        dst_port,
+        client_ip,
+        client_port,
+        server_ip,
+        server_port,
         sni: sni.to_string(),
+        cipher_id,
+        server_random,
         client_random,
         premaster,
     })
 }
 
 fn convert(record: &Record) -> bson::Document {
+    let mut id = bson::Document::new();
+    id.insert("c", record.client_random.to_bson());
+    id.insert("h", &record.sni);
+    id.insert("i", record.server_ip.to_bson());
+    if record.server_port != 443 {
+        id.insert("p", record.server_port as i32);
+    }
     let mut document = bson::Document::new();
-    document.insert("_id", record.client_random.to_bson());
-    document.insert("si", record.src_ip.to_bson());
-    document.insert("sp", record.src_port as i32);
-    document.insert("di", record.dst_ip.to_bson());
-    document.insert("dp", record.dst_port as i32);
+    document.insert("_id", id);
     document.insert("t", record.timestamp);
-    document.insert("h", &record.sni);
+    document.insert("i", record.client_ip.to_bson());
+    document.insert("p", record.client_port as i32);
+    document.insert("c", record.cipher_id as i32);
+    document.insert("r", record.server_random.to_bson());
     document.insert("p", record.premaster.to_bson());
     document
 }
 
 struct Record {
     pub timestamp: DateTime<Utc>,
-    pub src_ip: IpAddr,
-    pub src_port: u16,
-    pub dst_ip: IpAddr,
-    pub dst_port: u16,
+    pub client_ip: IpAddr,
+    pub client_port: u16,
+    pub server_ip: IpAddr,
+    pub server_port: u16,
     pub sni: String,
+    pub cipher_id: u16,
+    pub server_random: Vec<u8>,
     pub client_random: Vec<u8>,
     pub premaster: Vec<u8>,
 }
