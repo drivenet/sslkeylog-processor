@@ -8,6 +8,7 @@ use regex::Regex;
 use std::{io::BufRead, net::IpAddr, str::FromStr, time::Duration, time::SystemTime};
 
 const TIME_TO_LIVE: u16 = 183;
+const KEYS_COLLECTION_NAME: &str = "keys";
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
@@ -38,7 +39,7 @@ fn main() -> Result<()> {
     };
 
     let db = mongodb::sync::Client::with_uri_str(&connection_string)?.database(&db_name);
-    let keys_collection = db.collection("keys");
+    let keys_collection = db.collection(KEYS_COLLECTION_NAME);
 
     // TODO: create indexes with method calls when available
     db.run_command(
