@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let keys_collection = get_collections(&db)?;
 
     let threshold = SystemTime::now() + Duration::from_secs(60);
-    for path in get_paths(args.patterns.iter())? {
+    for path in get_paths(args.patterns)? {
         process_entry(&path, threshold, &keys_collection)?;
     }
 
@@ -30,10 +30,14 @@ fn main() -> Result<()> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_paths<'a, Pattern: 'a + AsRef<str>>(
-    patterns: impl Iterator<Item = Pattern>,
-) -> Result<impl Iterator<Item = PathBuf>> {
+fn get_paths<'a, Patterns: IntoIterator>(
+    patterns: Patterns,
+) -> Result<impl Iterator<Item = PathBuf>>
+where
+    Patterns::Item: 'a + AsRef<str>,
+{
     Ok(patterns
+        .into_iter()
         .map(|p| glob::glob(p.as_ref()))
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
@@ -43,10 +47,13 @@ fn get_paths<'a, Pattern: 'a + AsRef<str>>(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn get_paths<'a, Pattern: 'a + AsRef<str>>(
-    patterns: impl Iterator<Item = Pattern>,
-) -> Result<impl Iterator<Item = PathBuf>> {
-    Ok(patterns.map(|v| PathBuf::from(v.as_ref())))
+fn get_paths<'a, Patterns: IntoIterator>(
+    patterns: Patterns,
+) -> Result<impl Iterator<Item = PathBuf>>
+where
+    Patterns::Item: 'a + AsRef<str>,
+{
+    Ok(patterns.into_iter().map(|v| PathBuf::from(v.as_ref())))
 }
 
 fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collection> {
@@ -157,11 +164,14 @@ fn process_file(
     Ok(())
 }
 
-fn process_lines(
-    lines: impl IntoIterator<Item = String>,
+fn process_lines<'a, Lines: IntoIterator>(
+    lines: Lines,
     file_name: &impl std::fmt::Display,
     keys_collection: &mongodb::sync::Collection,
-) -> Result<()> {
+) -> Result<()>
+where
+    Lines::Item: 'a + AsRef<str>,
+{
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
     for line in lines {
@@ -171,7 +181,7 @@ fn process_lines(
             line_num,
         };
 
-        let record = parse(&line, &context)?;
+        let record = parse(line.as_ref(), &context)?;
         let document = convert(&record);
         batch.push(document);
 
