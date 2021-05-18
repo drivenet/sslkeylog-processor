@@ -207,10 +207,10 @@ fn parse(line: &str, context: &ParseContext) -> Result<Record> {
 
 fn convert(record: &Record) -> bson::Document {
     let id = doc! {
-        "c": record.client_random.to_bson(),
-        "h": &record.sni,
-        "i": record.server_ip.to_bson(),
         "p": record.server_port as i32,
+        "i": record.server_ip.to_bson(),
+        "h": &record.sni,
+        "c": record.client_random.to_bson(),
     };
     doc! {
         "_id": id,
