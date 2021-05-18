@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     };
 
     for path in paths {
-        process_file(&path, threshold, &keys_collection)?;
+        process_entry(&path, threshold, &keys_collection)?;
     }
 
     Ok(())
@@ -82,32 +82,45 @@ fn print_usage(program: &str, opts: getopts::Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn process_file(
+fn process_entry(
     path: &std::path::Path,
     threshold: SystemTime,
     keys_collection: &mongodb::sync::Collection,
 ) -> Result<()> {
-    let entry_name = &path.display();
-
     let metadata = std::fs::metadata(path)
-        .with_context(|| format!("Failed to get metadata for entry {}", entry_name))?;
+        .with_context(|| format!("Failed to get metadata for entry {}", path.display()))?;
     if !metadata.is_file() {
         return Ok(());
     }
+
     let mtime = metadata
         .modified()
-        .with_context(|| format!("Failed to get mtime for file {}", entry_name))?;
+        .with_context(|| format!("Failed to get mtime for file {}", path.display()))?;
     if mtime > threshold {
         return Ok(());
     }
 
+    process_file(path, keys_collection)?;
+
+    Ok(())
+}
+
+fn process_file(
+    path: &std::path::Path,
+    keys_collection: &mongodb::sync::Collection,
+) -> Result<(), Error> {
+    let file_name = &path.display();
+
     let file =
-        std::fs::File::open(path).with_context(|| format!("Failed to open file {}", entry_name))?;
+        std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
     let lines = std::io::BufReader::new(file).lines().map(|l| {
-        l.with_context(|| format!("Failed to read line from file {}", entry_name))
+        l.with_context(|| format!("Failed to read line from file {}", file_name))
             .unwrap()
     });
-    process_lines(lines, entry_name, keys_collection)
+
+    process_lines(lines, file_name, keys_collection)?;
+
+    Ok(())
 }
 
 fn process_lines(
