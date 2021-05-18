@@ -5,43 +5,44 @@ use anyhow::{Context, Error, Result};
 use chrono::{DateTime, Utc};
 use mongodb::bson::{self, doc, Bson};
 use regex::Regex;
-use std::{io::BufRead, net::IpAddr, str::FromStr, time::Duration, time::SystemTime};
+use std::{
+    io::BufRead, net::IpAddr, path::PathBuf, str::FromStr, time::Duration, time::SystemTime,
+};
 
 const TIME_TO_LIVE: u16 = 183;
 const KEYS_COLLECTION_NAME: &str = "keys";
 
 fn main() -> Result<()> {
-    let args: Vec<_> = std::env::args().collect();
-    let program = args[0].clone();
-
-    let mut opts = getopts::Options::new();
-    opts.reqopt("s", "connection", "set connection string", "mongodb://...");
-    opts.reqopt("d", "db", "set database name", "test");
-    opts.optflag("h", "help", "print this help menu");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            print_usage(&program, opts);
-            return Err(Error::from(e));
-        }
+    let args = match parse_args()? {
+        Some(v) => v,
+        None => return Ok(()),
     };
-    if matches.opt_present("h") {
-        print_usage(&program, opts);
-        return Ok(());
+
+    let db = mongodb::sync::Client::with_uri_str(&args.connection_string)?.database(&args.db_name);
+    let keys_collection = get_collections(&db)?;
+
+    let threshold = SystemTime::now() + Duration::from_secs(60);
+    for path in get_paths(args.patterns.iter())? {
+        process_entry(&path, threshold, &keys_collection)?;
     }
 
-    let db_name = matches.opt_str("d").unwrap();
-    let connection_string = matches.opt_str("s").unwrap();
-    let patterns = matches.free;
-    if patterns.is_empty() {
-        print_usage(&program, opts);
-        return Err(Error::msg("Missing file names"));
-    };
+    Ok(())
+}
 
-    let db = mongodb::sync::Client::with_uri_str(&connection_string)?.database(&db_name);
+fn get_paths<'a, Pattern: 'a + AsRef<str>>(
+    patterns: impl Iterator<Item = Pattern>,
+) -> Result<Vec<PathBuf>> {
+    Ok(if cfg!(windows) {
+        let glob_result: Result<Vec<_>, _> = patterns.map(|p| glob::glob(p.as_ref())).collect();
+        let globbed_paths: Result<Vec<_>, _> = glob_result?.into_iter().flatten().collect();
+        globbed_paths?.into_iter().collect()
+    } else {
+        patterns.map(|v| PathBuf::from(v.as_ref())).collect()
+    })
+}
+
+fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collection> {
     let keys_collection = db.collection(KEYS_COLLECTION_NAME);
-
-    // TODO: create indexes with method calls when available
     db.run_command(
         doc! {
         "createIndexes": keys_collection.name(),
@@ -61,20 +62,42 @@ fn main() -> Result<()> {
     )
     .context("Failed to create indexes")?;
 
-    let threshold = SystemTime::now() + Duration::from_secs(60);
-    let paths: Vec<_> = if cfg!(windows) {
-        let glob_result: Result<Vec<_>, _> = patterns.iter().map(|p| glob::glob(p)).collect();
-        let globbed_paths: Result<Vec<_>, _> = glob_result?.into_iter().flatten().collect();
-        globbed_paths?.into_iter().collect()
-    } else {
-        patterns.iter().map(std::path::PathBuf::from).collect()
-    };
+    Ok(keys_collection)
+}
 
-    for path in paths {
-        process_entry(&path, threshold, &keys_collection)?;
+fn parse_args() -> Result<Option<CommandLineArgs>> {
+    let args: Vec<_> = std::env::args().collect::<Vec<_>>();
+    let mut opts = getopts::Options::new();
+    opts.reqopt("s", "connection", "set connection string", "mongodb://...");
+    opts.reqopt("d", "db", "set database name", "test");
+    opts.optflag("h", "help", "print this help menu");
+
+    let program = &args[0];
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(e) => {
+            print_usage(&program, opts);
+            return Err(Error::from(e));
+        }
+    };
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return Ok(None);
     }
 
-    Ok(())
+    let db_name = matches.opt_str("d").unwrap();
+    let connection_string = matches.opt_str("s").unwrap();
+    let patterns = matches.free;
+    if patterns.is_empty() {
+        print_usage(&program, opts);
+        return Err(Error::msg("Missing file names"));
+    };
+
+    Ok(Some(CommandLineArgs {
+        patterns,
+        connection_string,
+        db_name,
+    }))
 }
 
 fn print_usage(program: &str, opts: getopts::Options) {
@@ -261,6 +284,12 @@ fn convert(record: &Record) -> bson::Document {
         "r": record.server_random.to_bson(),
         "p": record.premaster.to_bson(),
     }
+}
+
+struct CommandLineArgs {
+    pub patterns: Vec<String>,
+    pub connection_string: String,
+    pub db_name: String,
 }
 
 struct Record {
