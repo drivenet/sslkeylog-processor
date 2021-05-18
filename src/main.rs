@@ -120,6 +120,9 @@ fn process_file(
 
     process_lines(lines, file_name, keys_collection)?;
 
+    std::fs::remove_file(&path)
+        .with_context(|| format!("Failed to remove file {}", path.display()))?;
+
     Ok(())
 }
 
