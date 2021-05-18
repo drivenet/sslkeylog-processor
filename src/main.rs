@@ -3,7 +3,7 @@ extern crate lazy_static;
 
 use anyhow::{Context, Error, Result};
 use chrono::{DateTime, Utc};
-use mongodb::bson;
+use mongodb::bson::{self, doc, Bson};
 use regex::Regex;
 use std::{io::BufRead, net::IpAddr, str::FromStr, time::Duration, time::SystemTime};
 
@@ -206,22 +206,21 @@ fn parse(line: &str, context: &ParseContext) -> Result<Record> {
 }
 
 fn convert(record: &Record) -> bson::Document {
-    let mut id = bson::Document::new();
-    id.insert("c", record.client_random.to_bson());
-    id.insert("h", &record.sni);
-    id.insert("i", record.server_ip.to_bson());
-    if record.server_port != 443 {
-        id.insert("p", record.server_port as i32);
+    let id = doc! {
+        "c": record.client_random.to_bson(),
+        "h": &record.sni,
+        "i": record.server_ip.to_bson(),
+        "p": record.server_port as i32,
+    };
+    doc! {
+        "_id": id,
+        "t": record.timestamp,
+        "i": record.client_ip.to_bson(),
+        "p": record.client_port as i32,
+        "c": record.cipher_id as i32,
+        "r": record.server_random.to_bson(),
+        "p": record.premaster.to_bson(),
     }
-    let mut document = bson::Document::new();
-    document.insert("_id", id);
-    document.insert("t", record.timestamp);
-    document.insert("i", record.client_ip.to_bson());
-    document.insert("p", record.client_port as i32);
-    document.insert("c", record.cipher_id as i32);
-    document.insert("r", record.server_random.to_bson());
-    document.insert("p", record.premaster.to_bson());
-    document
 }
 
 struct Record {
@@ -238,12 +237,12 @@ struct Record {
 }
 
 trait ToBson {
-    fn to_bson(&self) -> bson::Bson;
+    fn to_bson(&self) -> Bson;
 }
 
 impl ToBson for Vec<u8> {
-    fn to_bson(&self) -> bson::Bson {
-        bson::Bson::from(bson::Binary {
+    fn to_bson(&self) -> Bson {
+        Bson::from(bson::Binary {
             subtype: bson::spec::BinarySubtype::UserDefined(0),
             bytes: self.to_vec(),
         })
@@ -251,10 +250,10 @@ impl ToBson for Vec<u8> {
 }
 
 impl ToBson for IpAddr {
-    fn to_bson(&self) -> bson::Bson {
+    fn to_bson(&self) -> Bson {
         match self {
-            IpAddr::V4(a) => bson::Bson::from(u32::from(*a)),
-            IpAddr::V6(a) => bson::Bson::from(bson::Binary {
+            IpAddr::V4(a) => Bson::from(u32::from(*a)),
+            IpAddr::V6(a) => Bson::from(bson::Binary {
                 subtype: bson::spec::BinarySubtype::UserDefined(0),
                 bytes: a.octets().to_vec(),
             }),
