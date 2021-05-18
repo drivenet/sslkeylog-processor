@@ -33,9 +33,12 @@ fn get_paths<'a, Pattern: 'a + AsRef<str>>(
     patterns: impl Iterator<Item = Pattern>,
 ) -> Result<Vec<PathBuf>> {
     Ok(if cfg!(windows) {
-        let glob_result: Result<Vec<_>, _> = patterns.map(|p| glob::glob(p.as_ref())).collect();
-        let globbed_paths: Result<Vec<_>, _> = glob_result?.into_iter().flatten().collect();
-        globbed_paths?.into_iter().collect()
+        patterns
+            .map(|p| glob::glob(p.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
     } else {
         patterns.map(|v| PathBuf::from(v.as_ref())).collect()
     })
