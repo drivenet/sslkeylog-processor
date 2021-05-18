@@ -74,7 +74,7 @@ fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collec
 }
 
 fn parse_args() -> Result<Option<CommandLineArgs>> {
-    let args: Vec<_> = std::env::args().collect::<Vec<_>>();
+    let args: Vec<_> = std::env::args().collect();
     let mut opts = getopts::Options::new();
     opts.reqopt("s", "connection", "set connection string", "mongodb://...");
     opts.reqopt("d", "db", "set database name", "test");
