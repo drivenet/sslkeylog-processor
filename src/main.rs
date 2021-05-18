@@ -338,12 +338,12 @@ impl ToBson for IpAddr {
     }
 }
 
-struct ParseContext<'local> {
-    pub file_name: &'local dyn std::fmt::Display,
+struct ParseContext<'a> {
+    pub file_name: &'a dyn std::fmt::Display,
     pub line_num: u64,
 }
 
-impl<'local> std::fmt::Display for ParseContext<'local> {
+impl<'a> std::fmt::Display for ParseContext<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}:{}", self.file_name, self.line_num))
     }
