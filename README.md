@@ -1,5 +1,5 @@
 # sslkeylog-processor
-This is an utility to process logs produced by [sslkeylog](https://github.com/drivenet/sslkeylog) and send them to MongoDB instance.
+This is a tool to process logs produced by the [sslkeylog](https://github.com/drivenet/sslkeylog) utiliy and send them to a MongoDB instance.
 
 ## Building
 `cargo build --release`
