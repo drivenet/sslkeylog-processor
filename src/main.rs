@@ -7,6 +7,8 @@ use mongodb::bson::{self, doc, Bson};
 use regex::Regex;
 use std::{io::BufRead, net::IpAddr, str::FromStr, time::Duration, time::SystemTime};
 
+const TIME_TO_LIVE: u16 = 183;
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     let program = args[0].clone();
@@ -37,6 +39,27 @@ fn main() -> Result<()> {
 
     let db = mongodb::sync::Client::with_uri_str(&connection_string)?.database(&db_name);
     let keys_collection = db.collection("keys");
+
+    // TODO: create indexes with method calls when available
+    db.run_command(
+        doc! {
+        "createIndexes": keys_collection.name(),
+        "indexes": vec![
+            doc! {
+                "key": doc! { "t" : 1 },
+                "name": "expiration",
+                "expireAfterSeconds": u64::from(TIME_TO_LIVE) * 86400,
+            },
+            doc! {
+                "key": doc! { "_id.c" : 1 },
+                "name": "client_random",
+            },
+        ],
+        },
+        None,
+    )
+    .context("Failed to create indexes")?;
+
     let threshold = SystemTime::now() + Duration::from_secs(60);
     let paths: Vec<_> = if cfg!(windows) {
         let glob_result: Result<Vec<_>, _> = patterns.iter().map(|p| glob::glob(p)).collect();
