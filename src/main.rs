@@ -32,20 +32,21 @@ fn main() -> Result<()> {
 #[cfg(target_os = "windows")]
 fn get_paths<'a, Pattern: 'a + AsRef<str>>(
     patterns: impl Iterator<Item = Pattern>,
-) -> Result<Vec<PathBuf>> {
+) -> Result<impl Iterator<Item = PathBuf>> {
     Ok(patterns
         .map(|p| glob::glob(p.as_ref()))
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .flatten()
-        .collect::<Result<Vec<_>, _>>()?)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter())
 }
 
 #[cfg(not(target_os = "windows"))]
 fn get_paths<'a, Pattern: 'a + AsRef<str>>(
     patterns: impl Iterator<Item = Pattern>,
-) -> Result<Vec<PathBuf>> {
-    Ok(patterns.map(|v| PathBuf::from(v.as_ref())).collect())
+) -> Result<impl Iterator<Item = PathBuf>> {
+    Ok(patterns.map(|v| PathBuf::from(v.as_ref())))
 }
 
 fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collection> {
