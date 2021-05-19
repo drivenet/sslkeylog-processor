@@ -141,23 +141,21 @@ fn write_batch(
     let options = mongodb::options::InsertManyOptions::builder()
         .ordered(false)
         .build();
+
+    const DUPLICATE_KEY_ERROR_CODE: i32 = 11000;
     match keys_collection.insert_many(batch, options) {
         Ok(_) => Ok(()),
-        Err(e) => {
-            if let mongodb::error::ErrorKind::BulkWriteError(failure) = e.kind.as_ref() {
-                if failure.write_concern_error.is_none()
-                    && failure
-                        .write_errors
-                        .as_ref()
-                        .map(|e| e.iter().all(|error| error.code == 11000))
-                        .unwrap_or(false)
-                {
-                    return Ok(());
-                }
-            }
-
-            Err(anyhow!(e))
+        Err(e)
+            if matches!(
+                e.kind.as_ref(),
+                mongodb::error::ErrorKind::BulkWriteError(f)
+                if f.write_concern_error.is_none()
+                    && f.write_errors.as_ref().map(|b| b.iter().all(|e| e.code == DUPLICATE_KEY_ERROR_CODE)).unwrap_or(false)
+            ) =>
+        {
+            Ok(())
         }
+        Err(e) => Err(anyhow!(e)),
     }
 }
 
