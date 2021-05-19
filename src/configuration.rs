@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 
 pub(crate) struct Configuration {
     pub patterns: Vec<String>,
@@ -10,7 +10,12 @@ pub(crate) struct Configuration {
 
 pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
     let mut opts = getopts::Options::new();
-    opts.reqopt("s", "connection", "set connection string", "mongodb://...");
+    opts.reqopt(
+        "s",
+        "connection",
+        "set connection string, start with @ to load from file",
+        "mongodb://... | @file",
+    );
     opts.reqopt("d", "db", "set database name", "test");
     opts.optflag("h", "help", "print this help menu");
 
@@ -33,6 +38,19 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     if patterns.is_empty() {
         print_usage(&program, opts);
         return Err(Error::msg("Missing file names"));
+    };
+
+    let connection_string = if let Some(cs_name) = connection_string.strip_prefix('@') {
+        let content = std::fs::read(cs_name)
+            .with_context(|| format!("Failed to read connection string from file {}", cs_name))?;
+        let content = std::str::from_utf8(&content)
+            .with_context(|| format!("Broken connection string encoding in file {}", cs_name))?;
+        content
+            .strip_prefix("\u{FEFF}")
+            .unwrap_or(content)
+            .to_owned()
+    } else {
+        connection_string
     };
 
     Ok(Some(Configuration {
