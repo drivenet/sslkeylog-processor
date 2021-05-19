@@ -1,19 +1,21 @@
+mod configuration;
+mod datamodel;
+mod filesystem;
+mod to_bson;
+
 #[macro_use]
 extern crate lazy_static;
 
+use std::{convert::TryFrom, io::BufRead, time::Duration, time::SystemTime};
+
 use anyhow::{Context, Error, Result};
-use chrono::{DateTime, Utc};
-use mongodb::bson::{self, doc, Bson};
-use regex::Regex;
-use std::{
-    io::BufRead, net::IpAddr, path::PathBuf, str::FromStr, time::Duration, time::SystemTime,
-};
+use mongodb::bson::{self, doc};
 
 const TIME_TO_LIVE: u16 = 183;
 const KEYS_COLLECTION_NAME: &str = "keys";
 
 fn main() -> Result<()> {
-    let args = match parse_args()? {
+    let args = match configuration::parse_args(&std::env::args().collect::<Vec<_>>())? {
         Some(v) => v,
         None => return Ok(()),
     };
@@ -22,38 +24,11 @@ fn main() -> Result<()> {
     let keys_collection = get_collections(&db)?;
 
     let threshold = SystemTime::now() + Duration::from_secs(60);
-    for path in get_paths(args.patterns)? {
+    for path in filesystem::get_paths(args.patterns)? {
         process_entry(&path, threshold, &keys_collection)?;
     }
 
     Ok(())
-}
-
-#[cfg(target_os = "windows")]
-fn get_paths<'a, Patterns: IntoIterator>(
-    patterns: Patterns,
-) -> Result<impl Iterator<Item = PathBuf>>
-where
-    Patterns::Item: 'a + AsRef<str>,
-{
-    Ok(patterns
-        .into_iter()
-        .map(|p| glob::glob(p.as_ref()))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_paths<'a, Patterns: IntoIterator>(
-    patterns: Patterns,
-) -> Result<impl Iterator<Item = PathBuf>>
-where
-    Patterns::Item: 'a + AsRef<str>,
-{
-    Ok(patterns.into_iter().map(|v| PathBuf::from(v.as_ref())))
 }
 
 fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collection> {
@@ -78,46 +53,6 @@ fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collec
     .context("Failed to create indexes")?;
 
     Ok(keys_collection)
-}
-
-fn parse_args() -> Result<Option<CommandLineArgs>> {
-    let args: Vec<_> = std::env::args().collect();
-    let mut opts = getopts::Options::new();
-    opts.reqopt("s", "connection", "set connection string", "mongodb://...");
-    opts.reqopt("d", "db", "set database name", "test");
-    opts.optflag("h", "help", "print this help menu");
-
-    let program = &args[0];
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            print_usage(&program, opts);
-            return Err(Error::from(e));
-        }
-    };
-    if matches.opt_present("h") {
-        print_usage(&program, opts);
-        return Ok(None);
-    }
-
-    let db_name = matches.opt_str("d").unwrap();
-    let connection_string = matches.opt_str("s").unwrap();
-    let patterns = matches.free;
-    if patterns.is_empty() {
-        print_usage(&program, opts);
-        return Err(Error::msg("Missing file names"));
-    };
-
-    Ok(Some(CommandLineArgs {
-        patterns,
-        connection_string,
-        db_name,
-    }))
-}
-
-fn print_usage(program: &str, opts: getopts::Options) {
-    let brief = format!("Usage: {} file1 [file2...fileN] [options]", program);
-    print!("{}", opts.usage(&brief));
 }
 
 fn process_entry(
@@ -181,23 +116,21 @@ where
             line_num,
         };
 
-        let record = parse(line.as_ref(), &context)?;
-        let document = convert(&record);
-        batch.push(document);
+        let record = datamodel::Record::try_from(line.as_ref())
+            .with_context(|| format!("Failed to parse at {}", context))?;
+        batch.push(bson::Document::from(record));
 
         const BATCH_SIZE: usize = 1000;
         if batch.len() >= BATCH_SIZE {
-            write_batch(&keys_collection, batch, &context)?;
+            write_batch(&keys_collection, batch)
+                .with_context(|| format!("Failed to write batch at {}", context))?;
             batch = Vec::new();
         }
     }
 
     if !batch.is_empty() {
-        let context = ParseContext {
-            file_name,
-            line_num,
-        };
-        write_batch(&keys_collection, batch, &context)?;
+        write_batch(&keys_collection, batch)
+            .with_context(|| format!("Failed to write final batch for {}", file_name))?;
     }
 
     println!("{}: {}", file_name, line_num);
@@ -207,7 +140,6 @@ where
 fn write_batch(
     keys_collection: &mongodb::sync::Collection,
     batch: Vec<bson::Document>,
-    context: &ParseContext,
 ) -> Result<()> {
     let options = mongodb::options::InsertManyOptions::builder()
         .ordered(false)
@@ -227,123 +159,7 @@ fn write_batch(
                 }
             }
 
-            Err(Error::from(e))
-                .with_context(|| format!("Failed to insert records from {}", context))
-        }
-    }
-}
-
-fn parse(line: &str, context: &ParseContext) -> Result<Record> {
-    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,})$";
-    lazy_static! {
-        static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).unwrap();
-    }
-
-    let captures = FILTER_REGEX
-        .captures(line)
-        .with_context(|| format!("Failed to parse line at {}\n{}", context, line))?;
-    let timestamp = &captures[1];
-    let timestamp = DateTime::parse_from_rfc3339(timestamp)
-        .with_context(|| format!("Invalid timestamp {} at {}", timestamp, context))?
-        .with_timezone(&Utc);
-    let client_ip = &captures[2];
-    let client_ip = IpAddr::from_str(client_ip)
-        .with_context(|| format!("Invalid client IP address {} at {}", client_ip, context))?;
-    let client_port = &captures[3];
-    let client_port = u16::from_str(client_port)
-        .with_context(|| format!("Invalid client port {} at {}", client_port, context))?;
-    let server_ip = &captures[4];
-    let server_ip = IpAddr::from_str(server_ip)
-        .with_context(|| format!("Invalid server IP address {} at {}", server_ip, context))?;
-    let server_port = &captures[5];
-    let server_port = u16::from_str(server_port)
-        .with_context(|| format!("Invalid server port {} at {}", server_port, context))?;
-    let sni = &captures[6];
-    let cipher_id = &captures[7];
-    let cipher_id = u16::from_str_radix(cipher_id, 16)
-        .with_context(|| format!("Invalid cipher id {} at {}", cipher_id, context))?;
-    let server_random = &captures[8];
-    let server_random = hex::decode(server_random)
-        .with_context(|| format!("Invalid server random {} at {}", server_random, context))?;
-    let client_random = &captures[9];
-    let client_random = hex::decode(client_random)
-        .with_context(|| format!("Invalid client random {} at {}", client_random, context))?;
-    let premaster = &captures[10];
-    let premaster = hex::decode(premaster)
-        .with_context(|| format!("Invalid premaster secret {} at {}", premaster, context))?;
-
-    Ok(Record {
-        timestamp,
-        client_ip,
-        client_port,
-        server_ip,
-        server_port,
-        sni: sni.to_string(),
-        cipher_id,
-        server_random,
-        client_random,
-        premaster,
-    })
-}
-
-fn convert(record: &Record) -> bson::Document {
-    let id = doc! {
-        "p": record.server_port as i32,
-        "i": record.server_ip.to_bson(),
-        "h": &record.sni,
-        "c": record.client_random.to_bson(),
-    };
-    doc! {
-        "_id": id,
-        "t": record.timestamp,
-        "i": record.client_ip.to_bson(),
-        "p": record.client_port as i32,
-        "c": record.cipher_id as i32,
-        "r": record.server_random.to_bson(),
-        "p": record.premaster.to_bson(),
-    }
-}
-
-struct CommandLineArgs {
-    pub patterns: Vec<String>,
-    pub connection_string: String,
-    pub db_name: String,
-}
-
-struct Record {
-    pub timestamp: DateTime<Utc>,
-    pub client_ip: IpAddr,
-    pub client_port: u16,
-    pub server_ip: IpAddr,
-    pub server_port: u16,
-    pub sni: String,
-    pub cipher_id: u16,
-    pub server_random: Vec<u8>,
-    pub client_random: Vec<u8>,
-    pub premaster: Vec<u8>,
-}
-
-trait ToBson {
-    fn to_bson(&self) -> Bson;
-}
-
-impl ToBson for Vec<u8> {
-    fn to_bson(&self) -> Bson {
-        Bson::from(bson::Binary {
-            subtype: bson::spec::BinarySubtype::UserDefined(0),
-            bytes: self.to_vec(),
-        })
-    }
-}
-
-impl ToBson for IpAddr {
-    fn to_bson(&self) -> Bson {
-        match self {
-            IpAddr::V4(a) => Bson::from(u32::from(*a)),
-            IpAddr::V6(a) => Bson::from(bson::Binary {
-                subtype: bson::spec::BinarySubtype::UserDefined(0),
-                bytes: a.octets().to_vec(),
-            }),
+            Err(Error::from(e)).context("Failed to insert records")
         }
     }
 }
@@ -353,7 +169,7 @@ struct ParseContext<'a> {
     pub line_num: u64,
 }
 
-impl<'a> std::fmt::Display for ParseContext<'a> {
+impl std::fmt::Display for ParseContext<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}:{}", self.file_name, self.line_num))
     }
