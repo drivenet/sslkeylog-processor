@@ -18,10 +18,8 @@
             },
             "args": [
                 "data/*",
-                "-s",
-                "mongodb://localhost/",
-                "-d",
-                "keys",
+                "-c",
+                "mongodb://localhost/keys",
             ],
             "cwd": "${workspaceFolder}"
         },

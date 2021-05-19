@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 
 pub(crate) struct Configuration {
     pub patterns: Vec<String>,
@@ -11,12 +11,11 @@ pub(crate) struct Configuration {
 pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
     let mut opts = getopts::Options::new();
     opts.reqopt(
-        "s",
+        "c",
         "connection",
         "set connection string, start with @ to load from file",
-        "mongodb://... | @file",
+        "mongodb://.../dbname?params... | @file",
     );
-    opts.reqopt("d", "db", "set database name", "test");
     opts.optflag("h", "help", "print this help menu");
 
     let program = args[0].as_ref().to_string_lossy();
@@ -32,8 +31,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         return Ok(None);
     }
 
-    let db_name = matches.opt_str("d").unwrap();
-    let connection_string = matches.opt_str("s").unwrap();
+    let connection_string = matches.opt_str("c").unwrap();
     let patterns = matches.free;
     if patterns.is_empty() {
         print_usage(&program, &opts);
@@ -52,6 +50,15 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     } else {
         connection_string
     };
+
+    let url = url::Url::parse("mongodb://localhost/abcd?def-qwe")
+        .context("Failed to parse connection string")?;
+    let db_name = url
+        .path()
+        .strip_prefix('/')
+        .and_then(|d| if d.is_empty() { None } else { Some(d) })
+        .ok_or_else(|| anyhow!("Failed to parse database name from connection string"))?
+        .to_owned();
 
     Ok(Some(Configuration {
         patterns,
