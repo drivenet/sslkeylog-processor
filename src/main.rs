@@ -136,7 +136,7 @@ where
 
 fn write_batch(
     keys_collection: &mongodb::sync::Collection,
-    batch: Vec<bson::Document>,
+    batch: impl IntoIterator<Item = bson::Document>,
 ) -> Result<()> {
     let options = mongodb::options::InsertManyOptions::builder()
         .ordered(false)
