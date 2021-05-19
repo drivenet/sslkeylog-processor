@@ -2,7 +2,7 @@
 This is a tool to process logs produced by the [sslkeylog](https://github.com/drivenet/sslkeylog) utiliy and send them to a MongoDB instance.
 
 ## Building
-`cargo build --release`
+`cargo build --release && strip target/release/sslkeylog-processor`
 
 # Usage
 Run the built binary to determine the command-line options.
