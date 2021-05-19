@@ -11,6 +11,7 @@ use std::{convert::TryFrom, io::BufRead, time::Duration, time::SystemTime};
 use anyhow::{anyhow, Context, Result};
 use mongodb::bson::{self, doc};
 
+const MTIME_THRESHOLD: Duration = Duration::from_secs(90);
 const TIME_TO_LIVE: u16 = 183;
 const KEYS_COLLECTION_NAME: &str = "keys";
 
@@ -23,7 +24,7 @@ fn main() -> Result<()> {
     let db = mongodb::sync::Client::with_uri_str(&args.connection_string)?.database(&args.db_name);
     let keys_collection = get_collections(&db)?;
 
-    let threshold = SystemTime::now() + Duration::from_secs(60);
+    let threshold = SystemTime::now() + MTIME_THRESHOLD;
     for path in filesystem::get_paths(args.patterns)? {
         process_entry(&path, threshold, &keys_collection)?;
     }
