@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Result};
 
 pub(crate) struct Configuration {
     pub patterns: Vec<String>,
@@ -24,7 +24,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         Ok(m) => m,
         Err(e) => {
             print_usage(&program, opts);
-            return Err(Error::from(e));
+            bail!(e);
         }
     };
     if matches.opt_present("h") {
@@ -37,7 +37,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     let patterns = matches.free;
     if patterns.is_empty() {
         print_usage(&program, opts);
-        return Err(Error::msg("Missing file names"));
+        bail!("Missing file names");
     };
 
     let connection_string = if let Some(cs_name) = connection_string.strip_prefix('@') {

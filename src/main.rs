@@ -8,7 +8,7 @@ extern crate lazy_static;
 
 use std::{convert::TryFrom, io::BufRead, time::Duration, time::SystemTime};
 
-use anyhow::{Context, Error, Result};
+use anyhow::{anyhow, Context, Result};
 use mongodb::bson::{self, doc};
 
 const TIME_TO_LIVE: u16 = 183;
@@ -78,10 +78,7 @@ fn process_entry(
     Ok(())
 }
 
-fn process_file(
-    path: &std::path::Path,
-    keys_collection: &mongodb::sync::Collection,
-) -> Result<(), Error> {
+fn process_file(path: &std::path::Path, keys_collection: &mongodb::sync::Collection) -> Result<()> {
     let file_name = &path.display();
 
     let file =
@@ -159,7 +156,7 @@ fn write_batch(
                 }
             }
 
-            Err(Error::from(e)).context("Failed to insert records")
+            Err(anyhow!(e))
         }
     }
 }
