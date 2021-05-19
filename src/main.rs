@@ -86,10 +86,10 @@ fn process_file(
 
     let file =
         std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
-    let lines = std::io::BufReader::new(file).lines().map(|l| {
-        l.with_context(|| format!("Failed to read line from file {}", file_name))
-            .unwrap()
-    });
+    let lines = std::io::BufReader::new(file)
+        .lines()
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| format!("Failed to read line from file {}", file_name))?;
 
     process_lines(lines, file_name, keys_collection)?;
 
