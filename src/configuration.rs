@@ -23,12 +23,12 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(e) => {
-            print_usage(&program, opts);
+            print_usage(&program, &opts);
             bail!(e);
         }
     };
     if matches.opt_present("h") {
-        print_usage(&program, opts);
+        print_usage(&program, &opts);
         return Ok(None);
     }
 
@@ -36,7 +36,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     let connection_string = matches.opt_str("s").unwrap();
     let patterns = matches.free;
     if patterns.is_empty() {
-        print_usage(&program, opts);
+        print_usage(&program, &opts);
         bail!("Missing file names");
     };
 
@@ -60,7 +60,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     }))
 }
 
-fn print_usage(program: &str, opts: getopts::Options) {
+fn print_usage(program: &str, opts: &getopts::Options) {
     let brief = format!("Usage: {} file1 [file2...fileN] [options]", program);
     print!("{}", opts.usage(&brief));
 }
