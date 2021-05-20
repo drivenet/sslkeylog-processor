@@ -46,8 +46,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
         connection_string
     };
 
-    let url = url::Url::parse("mongodb://localhost/abcd?def-qwe")
-        .context("Failed to parse connection string")?;
+    let url = url::Url::parse(&connection_string).context("Failed to parse connection string")?;
     let db_name = url
         .path()
         .strip_prefix('/')
