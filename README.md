@@ -2,9 +2,9 @@
 This is a tool to process logs produced by the [sslkeylog](https://github.com/drivenet/sslkeylog) utiliy and send them to a MongoDB instance.
 
 ## Building
-`cargo build --release && upx --best target/release/sslkeylog-processor`
+`cargo build --release && strip target/release/sslkeylog-processor && upx --best target/release/sslkeylog-processor`
 
-[UPX](https://github.com/upx/upx) is used to reduce binary size, if you prefer not using it, just `strip` it.
+[UPX](https://github.com/upx/upx) is used to reduce binary size, if you prefer not using it, just skip it.
 
 # Usage
 Run the built binary to determine the command-line options.
