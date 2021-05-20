@@ -12,7 +12,6 @@ use anyhow::{anyhow, Context, Result};
 use mongodb::bson::{self, doc};
 
 const MTIME_THRESHOLD: Duration = Duration::from_secs(90);
-const TIME_TO_LIVE: u16 = 183;
 const KEYS_COLLECTION_NAME: &str = "keys";
 
 fn main() -> Result<()> {
@@ -33,17 +32,7 @@ fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collec
     let keys_collection = db.collection(KEYS_COLLECTION_NAME);
     let command = doc! {
         "createIndexes": keys_collection.name(),
-        "indexes": vec![
-            doc! {
-                "key": doc! { "t" : 1 },
-                "name": "expiration",
-                "expireAfterSeconds": u64::from(TIME_TO_LIVE) * 86400,
-            },
-            doc! {
-                "key": doc! { "r" : 1 },
-                "name": "client_random",
-            },
-        ],
+        "indexes": datamodel::get_index_model(),
     };
     db.run_command(command, None)
         .context("Failed to create indexes")?;

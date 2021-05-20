@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, net::IpAddr, str::FromStr};
+use std::{convert::TryFrom, net::IpAddr, str::FromStr, time::Duration};
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -6,6 +6,8 @@ use mongodb::bson::{self, doc};
 use regex::Regex;
 
 use crate::to_bson::ToBson;
+
+const TIME_TO_LIVE: Duration = Duration::from_secs(183 * 86400);
 
 pub(crate) struct Record {
     pub timestamp: DateTime<Utc>,
@@ -18,6 +20,20 @@ pub(crate) struct Record {
     pub server_random: Vec<u8>,
     pub client_random: Vec<u8>,
     pub premaster: Vec<u8>,
+}
+
+pub(crate) fn get_index_model() -> Vec<bson::Document> {
+    vec![
+        doc! {
+            "key": doc! { "t" : 1 },
+            "name": "expiration",
+            "expireAfterSeconds": TIME_TO_LIVE.as_secs(),
+        },
+        doc! {
+            "key": doc! { "r" : 1 },
+            "name": "client_random",
+        },
+    ]
 }
 
 impl From<Record> for bson::Document {
