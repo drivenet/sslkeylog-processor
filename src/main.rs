@@ -31,8 +31,7 @@ fn main() -> Result<()> {
 
 fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collection> {
     let keys_collection = db.collection(KEYS_COLLECTION_NAME);
-    db.run_command(
-        doc! {
+    let command = doc! {
         "createIndexes": keys_collection.name(),
         "indexes": vec![
             doc! {
@@ -45,10 +44,9 @@ fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collec
                 "name": "client_random",
             },
         ],
-        },
-        None,
-    )
-    .context("Failed to create indexes")?;
+    };
+    db.run_command(command, None)
+        .context("Failed to create indexes")?;
 
     Ok(keys_collection)
 }
