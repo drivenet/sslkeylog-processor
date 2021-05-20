@@ -16,10 +16,7 @@ const TIME_TO_LIVE: u16 = 183;
 const KEYS_COLLECTION_NAME: &str = "keys";
 
 fn main() -> Result<()> {
-    let args = match configuration::parse_args(&std::env::args().collect::<Vec<_>>())? {
-        Some(v) => v,
-        None => return Ok(()),
-    };
+    let args = configuration::parse_args(&std::env::args().collect::<Vec<_>>())?;
 
     let db = mongodb::sync::Client::with_uri_str(&args.connection_string)?.database(&args.db_name);
     let keys_collection = get_collections(&db)?;

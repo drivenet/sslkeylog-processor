@@ -8,7 +8,7 @@ pub(crate) struct Configuration {
     pub db_name: String,
 }
 
-pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
+pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
     let mut opts = getopts::Options::new();
     opts.reqopt(
         "c",
@@ -16,7 +16,6 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         "set connection string, start with @ to load from file",
         "mongodb://.../dbname?params... | @file",
     );
-    opts.optflag("h", "help", "print this help menu");
 
     let program = args[0].as_ref().to_string_lossy();
     let matches = match opts.parse(&args[1..]) {
@@ -26,10 +25,6 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
             bail!(e);
         }
     };
-    if matches.opt_present("h") {
-        print_usage(&program, &opts);
-        return Ok(None);
-    }
 
     let connection_string = matches.opt_str("c").unwrap();
     let patterns = matches.free;
@@ -60,11 +55,11 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         .ok_or_else(|| anyhow!("Failed to parse database name from connection string"))?
         .to_owned();
 
-    Ok(Some(Configuration {
+    Ok(Configuration {
         patterns,
         connection_string,
         db_name,
-    }))
+    })
 }
 
 fn print_usage(program: &str, opts: &getopts::Options) {
