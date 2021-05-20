@@ -25,16 +25,16 @@ impl From<Record> for bson::Document {
         let id = doc! {
             "p": record.server_port as i32,
             "i": record.server_ip.to_bson(),
-            "h": &record.sni,
-            "c": record.client_random.to_bson(),
+            "r": record.server_random.to_bson(),
         };
         doc! {
             "_id": id,
+            "h": &record.sni,
+            "c": record.cipher_id as i32,
             "t": record.timestamp,
             "i": record.client_ip.to_bson(),
             "p": record.client_port as i32,
-            "c": record.cipher_id as i32,
-            "r": record.server_random.to_bson(),
+            "r": record.client_random.to_bson(),
             "p": record.premaster.to_bson(),
         }
     }

@@ -40,7 +40,7 @@ fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collec
                 "expireAfterSeconds": u64::from(TIME_TO_LIVE) * 86400,
             },
             doc! {
-                "key": doc! { "_id.c" : 1 },
+                "key": doc! { "r" : 1 },
                 "name": "client_random",
             },
         ],

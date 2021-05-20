@@ -14,16 +14,16 @@ On Windows, file names support [globbing](https://docs.rs/glob/), on other OSes 
 ```javascript
 {
   _id: {
-    "c": <client_random>:BinData,
-    "h": <sni>:string,
+    "r": <server_random>:BinData,
     "i": <server_ip>:int/BinData,
     "p": <server_port>:int,
   },
   "t": <timestamp>:DateTime,
+  "h": <sni>:string,
+  "r": <client_random>:BinData,
   "i": <client_ip>:int/BinData,
   "p": <client_port>:int,
   "c": <cipher_id>:int,
-  "r": <server_random>:BinData,
   "p": <premaster>:BinData,
 }
 ```
