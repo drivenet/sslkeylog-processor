@@ -17,11 +17,11 @@ const KEYS_COLLECTION_NAME: &str = "keys";
 fn main() -> Result<()> {
     let args = configuration::parse_args(&std::env::args().collect::<Vec<_>>())?;
 
-    let db = mongodb::sync::Client::with_uri_str(&args.connection_string)?.database(&args.db_name);
+    let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let keys_collection = get_collections(&db)?;
 
     let threshold = SystemTime::now() + MTIME_THRESHOLD;
-    for path in filesystem::get_paths(args.patterns)? {
+    for path in filesystem::get_paths(args.files)? {
         process_entry(&path, threshold, &keys_collection)?;
     }
 
