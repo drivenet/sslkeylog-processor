@@ -14,7 +14,19 @@ use mongodb::bson::{self, doc};
 const MTIME_THRESHOLD: Duration = Duration::from_secs(90);
 const KEYS_COLLECTION_NAME: &str = "keys";
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = try_main() {
+        const SD_ERR: &str = "<3>";
+        let prefix = match std::env::var("INVOCATION_ID") {
+            Ok(_) => SD_ERR,
+            Err(_) => "",
+        };
+        eprintln!("{}Error: {:?}", prefix, err);
+        std::process::exit(1);
+    }
+}
+
+fn try_main() -> Result<()> {
     let args = configuration::parse_args(&std::env::args().collect::<Vec<_>>())?;
 
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
