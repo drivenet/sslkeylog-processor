@@ -11,7 +11,7 @@ use std::{convert::TryFrom, io::BufRead, time::Duration, time::SystemTime};
 use anyhow::{anyhow, Context, Result};
 use mongodb::bson::{self, doc};
 
-const MTIME_THRESHOLD: Duration = Duration::from_secs(90);
+const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
 const KEYS_COLLECTION_NAME: &str = "keys";
 
 fn main() {
