@@ -80,13 +80,14 @@ mod test {
     #[test]
     fn test() {
         let config = parse_args(&[
-        "program",
-        "test",
-        "test2",
-        "-c",
-        "mongodb://user:pass@host1:27017,host2:27017,host3:27017/keys?replicaSet=rs&authSource=admin",
-    ])
-    .unwrap();
+            "program",
+            "test",
+            "test2",
+            "-c",
+            "mongodb://user:pass@host1:27017,host2:27017,host3:27017/keys?replicaSet=rs&authSource=admin",
+        ])
+        .unwrap();
+
         assert_eq!(config.files, &["test", "test2"]);
         assert_eq!(config.db_name, "keys");
     }
