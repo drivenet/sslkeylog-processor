@@ -42,6 +42,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
         content
             .strip_prefix("\u{FEFF}")
             .unwrap_or(content)
+            .trim()
             .to_owned()
     } else {
         connection_string
