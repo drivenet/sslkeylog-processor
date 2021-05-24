@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let keys_collection = get_collections(&db)?;
 
-    let threshold = SystemTime::now() + MTIME_THRESHOLD;
+    let threshold = SystemTime::now() - MTIME_THRESHOLD;
     for path in filesystem::get_paths(args.files)? {
         process_entry(&path, threshold, &keys_collection)?;
     }
