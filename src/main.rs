@@ -93,12 +93,13 @@ fn process_file(path: &std::path::Path, keys_collection: &mongodb::sync::Collect
     Ok(())
 }
 
-fn process_lines<'a, Lines: IntoIterator>(
+fn process_lines<'a, Lines>(
     lines: Lines,
     file_name: &impl std::fmt::Display,
     keys_collection: &mongodb::sync::Collection,
 ) -> Result<()>
 where
+    Lines: IntoIterator,
     Lines::Item: 'a + AsRef<str>,
 {
     let mut batch: Vec<bson::Document> = Vec::new();
