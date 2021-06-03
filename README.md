@@ -11,6 +11,7 @@ Run the built binary to determine the command-line options.
 On Windows, file names support [globbing](https://docs.rs/glob/), on other OSes shell expansion is expected to take care of that.
 
 # Schema
+All keys are placed in the `keys` collection with the following schema:
 ```javascript
 {
   _id: {
