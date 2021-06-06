@@ -28,6 +28,11 @@ fn main() {
 
 fn try_main() -> Result<()> {
     let args = configuration::parse_args(&std::env::args().collect::<Vec<_>>())?;
+    let args = if let Some(args) = args {
+        args
+    } else {
+        return Ok(());
+    };
 
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let keys_collection = get_collections(&db)?;

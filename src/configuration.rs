@@ -2,6 +2,8 @@ use std::ffi::OsStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 
+const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug)]
 pub(crate) struct Configuration {
     pub files: Vec<String>,
@@ -9,9 +11,11 @@ pub(crate) struct Configuration {
     pub db_name: String,
 }
 
-pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
+pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
     let mut opts = getopts::Options::new();
-    opts.reqopt(
+    opts.optflag("h", "help", "show this help");
+    opts.optflag("v", "version", "check version");
+    opts.optopt(
         "c",
         "connection",
         "set connection string, start with @ to load from file",
@@ -27,9 +31,21 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
         }
     };
 
-    let connection_string = matches
-        .opt_str("c")
-        .expect("Connection string is not specified.");
+    if matches.opt_present("h") {
+        print_usage(&program, &opts);
+        return Ok(None);
+    }
+
+    if matches.opt_present("v") {
+        println!("sslkeylog-processor {}", PACKAGE_VERSION);
+        return Ok(None);
+    }
+
+    let connection_string = matches.opt_str("c").ok_or_else(|| {
+        print_usage(&program, &opts);
+        anyhow!("Missing connection string")
+    })?;
+
     let files = matches.free;
     if files.is_empty() {
         print_usage(&program, &opts);
@@ -64,15 +80,18 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
         .ok_or_else(|| anyhow!("Failed to parse database name from connection string"))?
         .to_owned();
 
-    Ok(Configuration {
+    Ok(Some(Configuration {
         files,
         options,
         db_name,
-    })
+    }))
 }
 
 fn print_usage(program: &str, opts: &getopts::Options) {
-    let brief = format!("Usage: {} file1 [file2...fileN] [options]", program);
+    let brief = format!(
+        "Usage: {} file1 [file2...fileN] [options]\nVersion: {}",
+        program, PACKAGE_VERSION
+    );
     print!("{}", opts.usage(&brief));
 }
 
@@ -89,7 +108,8 @@ mod test {
             "-c",
             "mongodb://user:pass@host1:27017,host2:27017,host3:27017/keys?replicaSet=rs&authSource=admin",
         ])
-        .expect("Failed to parse arguments.");
+        .expect("Failed to parse arguments")
+        .expect("Failed to get real arguments");
 
         assert_eq!(config.files, &["test", "test2"]);
         assert_eq!(config.db_name, "keys");
