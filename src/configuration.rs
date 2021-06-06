@@ -27,7 +27,9 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Configuration> {
         }
     };
 
-    let connection_string = matches.opt_str("c").unwrap();
+    let connection_string = matches
+        .opt_str("c")
+        .expect("Connection string is not specified.");
     let files = matches.free;
     if files.is_empty() {
         print_usage(&program, &opts);
@@ -87,7 +89,7 @@ mod test {
             "-c",
             "mongodb://user:pass@host1:27017,host2:27017,host3:27017/keys?replicaSet=rs&authSource=admin",
         ])
-        .unwrap();
+        .expect("Failed to parse arguments.");
 
         assert_eq!(config.files, &["test", "test2"]);
         assert_eq!(config.db_name, "keys");
