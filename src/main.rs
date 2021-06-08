@@ -107,6 +107,7 @@ where
     Lines: IntoIterator,
     Lines::Item: 'a + AsRef<str>,
 {
+    println!("{}: open", file_name);
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
     for line in lines {
@@ -122,18 +123,21 @@ where
 
         const BATCH_SIZE: usize = 1000;
         if batch.len() >= BATCH_SIZE {
+            println!("{}: writing at {}", file_name, line_num);
             write_batch(&keys_collection, batch)
                 .with_context(|| format!("Failed to write batch at {}", context))?;
+            println!("{}: wrote at {}", file_name, line_num);
             batch = Vec::new();
         }
     }
 
     if !batch.is_empty() {
+        println!("{}: flushing at {}", file_name, line_num);
         write_batch(&keys_collection, batch)
-            .with_context(|| format!("Failed to write final batch for {}", file_name))?;
+            .with_context(|| format!("Failed to flush batch for {}", file_name))?;
     }
 
-    println!("{}: {}", file_name, line_num);
+    println!("{}: done at {}", file_name, line_num);
     Ok(())
 }
 
