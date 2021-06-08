@@ -6,9 +6,18 @@ mod to_bson;
 #[macro_use]
 extern crate lazy_static;
 
-use std::{convert::TryFrom, io::BufRead, time::Duration, time::SystemTime};
+use std::{
+    convert::TryFrom,
+    io::BufRead,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+    time::SystemTime,
+};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use mongodb::bson::{self, doc};
 
 const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
@@ -37,11 +46,29 @@ fn try_main() -> Result<()> {
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let keys_collection = get_collections(&db)?;
 
+    let term_token = Arc::new(AtomicBool::new(false));
+    register_signal(&term_token)?;
     let threshold = SystemTime::now() - MTIME_THRESHOLD;
     for path in filesystem::get_paths(args.files)? {
-        process_entry(&path, threshold, &keys_collection)?;
+        if term_token.load(Ordering::Relaxed) {
+            bail!("Terminated at path iteration");
+        }
+
+        process_entry(&path, threshold, &keys_collection, &term_token)?;
     }
 
+    Ok(())
+}
+
+#[cfg(unix)]
+fn register_signal(token: &Arc<AtomicBool>) -> Result<()> {
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&token))
+        .map(|_| ())
+        .context("Failed to register signal")
+}
+
+#[cfg(not(unix))]
+fn register_signal(_: &Arc<AtomicBool>) -> Result<()> {
     Ok(())
 }
 
@@ -61,6 +88,7 @@ fn process_entry(
     path: &std::path::Path,
     threshold: SystemTime,
     keys_collection: &mongodb::sync::Collection,
+    term_token: &Arc<AtomicBool>,
 ) -> Result<()> {
     let metadata = std::fs::metadata(path)
         .with_context(|| format!("Failed to get metadata for entry {}", path.display()))?;
@@ -75,14 +103,19 @@ fn process_entry(
         return Ok(());
     }
 
-    process_file(path, keys_collection)?;
+    process_file(path, keys_collection, term_token)?;
 
     Ok(())
 }
 
-fn process_file(path: &std::path::Path, keys_collection: &mongodb::sync::Collection) -> Result<()> {
+fn process_file(
+    path: &std::path::Path,
+    keys_collection: &mongodb::sync::Collection,
+    term_token: &Arc<AtomicBool>,
+) -> Result<()> {
     let file_name = &path.display();
 
+    println!("{}: open", file_name);
     let file =
         std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
     let lines = std::io::BufReader::new(file)
@@ -90,11 +123,12 @@ fn process_file(path: &std::path::Path, keys_collection: &mongodb::sync::Collect
         .collect::<Result<Vec<_>, _>>()
         .with_context(|| format!("Failed to read line from file {}", file_name))?;
 
-    process_lines(lines, file_name, keys_collection)?;
+    process_lines(lines, file_name, keys_collection, term_token)?;
 
     std::fs::remove_file(&path)
         .with_context(|| format!("Failed to remove file {}", path.display()))?;
 
+    println!("{}: done", file_name);
     Ok(())
 }
 
@@ -102,12 +136,12 @@ fn process_lines<'a, Lines>(
     lines: Lines,
     file_name: &impl std::fmt::Display,
     keys_collection: &mongodb::sync::Collection,
+    term_token: &Arc<AtomicBool>,
 ) -> Result<()>
 where
     Lines: IntoIterator,
     Lines::Item: 'a + AsRef<str>,
 {
-    println!("{}: open", file_name);
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
     for line in lines {
@@ -116,6 +150,10 @@ where
             file_name,
             line_num,
         };
+
+        if term_token.load(Ordering::Relaxed) {
+            bail!("Terminated at {}", context);
+        }
 
         let record = datamodel::Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", context))?;
@@ -137,7 +175,6 @@ where
             .with_context(|| format!("Failed to flush batch for {}", file_name))?;
     }
 
-    println!("{}: done at {}", file_name, line_num);
     Ok(())
 }
 
