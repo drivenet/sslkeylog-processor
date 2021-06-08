@@ -118,11 +118,7 @@ fn process_file(
     println!("{}: open", file_name);
     let file =
         std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
-    let lines = std::io::BufReader::new(file)
-        .lines()
-        .collect::<Result<Vec<_>, _>>()
-        .with_context(|| format!("Failed to read line from file {}", file_name))?;
-
+    let lines = std::io::BufReader::new(file).lines();
     process_lines(lines, file_name, keys_collection, term_token)?;
 
     std::fs::remove_file(&path)
@@ -132,15 +128,16 @@ fn process_file(
     Ok(())
 }
 
-fn process_lines<'a, Lines>(
+fn process_lines<'a, Lines, Line, Error>(
     lines: Lines,
     file_name: &impl std::fmt::Display,
     keys_collection: &mongodb::sync::Collection,
     term_token: &Arc<AtomicBool>,
 ) -> Result<()>
 where
-    Lines: IntoIterator,
-    Lines::Item: 'a + AsRef<str>,
+    Lines: IntoIterator<Item = Result<Line, Error>>,
+    Line: 'a + AsRef<str>,
+    Error: std::error::Error + Send + Sync + 'static,
 {
     let mut batch: Vec<bson::Document> = Vec::new();
     let mut line_num: u64 = 0;
@@ -155,6 +152,7 @@ where
             bail!("Terminated at {}", context);
         }
 
+        let line = line.with_context(|| format!("Failed to read line at {}", context))?;
         let record = datamodel::Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", context))?;
         batch.push(bson::Document::from(record));
