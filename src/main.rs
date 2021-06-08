@@ -136,7 +136,7 @@ fn process_lines<'a, Lines, Line, Error>(
 ) -> Result<()>
 where
     Lines: IntoIterator<Item = Result<Line, Error>>,
-    Line: 'a + AsRef<str>,
+    Line: AsRef<str> + 'a,
     Error: std::error::Error + Send + Sync + 'static,
 {
     let mut batch: Vec<bson::Document> = Vec::new();
