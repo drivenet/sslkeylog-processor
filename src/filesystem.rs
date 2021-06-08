@@ -6,7 +6,7 @@ use anyhow::Result;
 pub(crate) fn get_paths<'a, Patterns>(patterns: Patterns) -> Result<impl Iterator<Item = PathBuf>>
 where
     Patterns: IntoIterator,
-    Patterns::Item: 'a + AsRef<str>,
+    Patterns::Item: AsRef<str> + 'a,
 {
     Ok(patterns
         .into_iter()
@@ -22,7 +22,7 @@ where
 pub(crate) fn get_paths<'a, Patterns>(patterns: Patterns) -> Result<impl Iterator<Item = PathBuf>>
 where
     Patterns: IntoIterator,
-    Patterns::Item: 'a + AsRef<str>,
+    Patterns::Item: AsRef<str> + 'a,
 {
     Ok(patterns.into_iter().map(|v| PathBuf::from(v.as_ref())))
 }
