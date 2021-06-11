@@ -155,6 +155,13 @@ where
         let line = line.with_context(|| format!("Failed to read line at {}", context))?;
         let record = datamodel::Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", context))?;
+
+        //  This "normalizes" SNI as DNS name
+        let record = datamodel::Record {
+            sni: record.sni.trim_end_matches('.').to_lowercase(),
+            ..record
+        };
+
         batch.push(bson::Document::from(record));
 
         const BATCH_SIZE: usize = 1000;
