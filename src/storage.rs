@@ -64,6 +64,5 @@ fn create_collection(db: &Database, name: &str) -> Result<Collection> {
     };
     db.run_command(command, None)
         .context("Failed to create indexes")?;
-    println!("Create {}", name);
     Ok(c)
 }
