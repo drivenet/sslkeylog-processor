@@ -23,35 +23,26 @@ pub(crate) struct Record {
 }
 
 pub(crate) fn get_index_model() -> Vec<bson::Document> {
-    vec![
-        doc! {
-            "key": doc! { "t" : 1 },
-            "name": "expiration",
-            "expireAfterSeconds": TIME_TO_LIVE.as_secs(),
-        },
-        doc! {
-            "key": doc! { "r" : 1 },
-            "name": "client_random",
-        },
-    ]
+    vec![doc! {
+        "key": doc! { "t" : 1 },
+        "name": "expiration",
+        "expireAfterSeconds": TIME_TO_LIVE.as_secs(),
+    }]
 }
 
 impl From<Record> for bson::Document {
     fn from(record: Record) -> Self {
         let id = doc! {
-            "p": record.server_port as i32,
-            "i": record.server_ip.to_bson(),
-            "r": record.server_random.to_bson(),
+            "c": record.client_random.to_bson(),
+            "s": record.server_random.to_bson(),
         };
         doc! {
             "_id": id,
-            "h": &record.sni,
             "c": record.cipher_id as i32,
             "t": record.timestamp,
             "i": record.client_ip.to_bson(),
             "p": record.client_port as i32,
-            "r": record.client_random.to_bson(),
-            "p": record.premaster.to_bson(),
+            "k": record.premaster.to_bson(),
         }
     }
 }

@@ -1,12 +1,14 @@
 mod configuration;
 mod datamodel;
 mod filesystem;
+mod storage;
 mod to_bson;
 
 #[macro_use]
 extern crate lazy_static;
 
 use std::{
+    collections::HashMap,
     convert::TryFrom,
     io::BufRead,
     sync::{
@@ -17,11 +19,12 @@ use std::{
     time::SystemTime,
 };
 
-use anyhow::{anyhow, bail, Context, Result};
-use mongodb::bson::{self, doc};
+use anyhow::{bail, Context, Result};
+use mongodb::bson;
+use storage::Store;
 
 const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
-const KEYS_COLLECTION_NAME: &str = "keys";
+const KEYS_COLLECTION_PREFIX: &str = "keys";
 
 fn main() {
     if let Err(err) = try_main() {
@@ -44,17 +47,16 @@ fn try_main() -> Result<()> {
     };
 
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
-    let keys_collection = get_collections(&db)?;
-
     let term_token = Arc::new(AtomicBool::new(false));
     register_signal(&term_token)?;
+    let mut store = Store::new(&db);
     let threshold = SystemTime::now() - MTIME_THRESHOLD;
     for path in filesystem::get_paths(args.files)? {
         if term_token.load(Ordering::Relaxed) {
             bail!("Terminated at path iteration");
         }
 
-        process_entry(&path, threshold, &keys_collection, &term_token)?;
+        process_entry(&path, threshold, &mut store, &term_token)?;
     }
 
     Ok(())
@@ -72,22 +74,10 @@ fn register_signal(_: &Arc<AtomicBool>) -> Result<()> {
     Ok(())
 }
 
-fn get_collections(db: &mongodb::sync::Database) -> Result<mongodb::sync::Collection> {
-    let keys_collection = db.collection(KEYS_COLLECTION_NAME);
-    let command = doc! {
-        "createIndexes": keys_collection.name(),
-        "indexes": datamodel::get_index_model(),
-    };
-    db.run_command(command, None)
-        .context("Failed to create indexes")?;
-
-    Ok(keys_collection)
-}
-
 fn process_entry(
     path: &std::path::Path,
     threshold: SystemTime,
-    keys_collection: &mongodb::sync::Collection,
+    store: &mut Store,
     term_token: &Arc<AtomicBool>,
 ) -> Result<()> {
     let metadata = std::fs::metadata(path)
@@ -103,14 +93,14 @@ fn process_entry(
         return Ok(());
     }
 
-    process_file(path, keys_collection, term_token)?;
+    process_file(path, store, term_token)?;
 
     Ok(())
 }
 
 fn process_file(
     path: &std::path::Path,
-    keys_collection: &mongodb::sync::Collection,
+    store: &mut Store,
     term_token: &Arc<AtomicBool>,
 ) -> Result<()> {
     let file_name = &path.display();
@@ -119,7 +109,7 @@ fn process_file(
     let file =
         std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
     let lines = std::io::BufReader::new(file).lines();
-    process_lines(lines, file_name, keys_collection, term_token)?;
+    process_lines(lines, file_name, store, term_token)?;
 
     std::fs::remove_file(&path)
         .with_context(|| format!("Failed to remove file {}", path.display()))?;
@@ -131,7 +121,7 @@ fn process_file(
 fn process_lines<'a, Lines, Line, Error>(
     lines: Lines,
     file_name: &impl std::fmt::Display,
-    keys_collection: &mongodb::sync::Collection,
+    store: &mut Store,
     term_token: &Arc<AtomicBool>,
 ) -> Result<()>
 where
@@ -139,7 +129,7 @@ where
     Line: AsRef<str> + 'a,
     Error: std::error::Error + Send + Sync + 'static,
 {
-    let mut batch: Vec<bson::Document> = Vec::new();
+    let mut batch_map = HashMap::<String, Vec<bson::Document>>::new();
     let mut line_num: u64 = 0;
     for line in lines {
         line_num += 1;
@@ -162,50 +152,42 @@ where
             ..record
         };
 
+        let collection_name = format!(
+            "{}_{}_{}_{}",
+            KEYS_COLLECTION_PREFIX, record.server_ip, record.server_port, record.sni
+        );
+        let batch = batch_map
+            .entry(collection_name.clone())
+            .or_insert_with(Vec::new);
+
         batch.push(bson::Document::from(record));
 
         const BATCH_SIZE: usize = 1000;
         if batch.len() >= BATCH_SIZE {
-            println!("{}: writing at {}", file_name, line_num);
-            write_batch(&keys_collection, batch)
-                .with_context(|| format!("Failed to write batch at {}", context))?;
-            println!("{}: wrote at {}", file_name, line_num);
-            batch = Vec::new();
+            println!("{}: writing to {}", file_name, collection_name);
+            let batch = batch_map.remove(&collection_name).unwrap();
+            store.write(&collection_name, batch).with_context(|| {
+                format!("Failed to write to {} for {}", collection_name, file_name)
+            })?;
         }
     }
 
-    if !batch.is_empty() {
-        println!("{}: flushing at {}", file_name, line_num);
-        write_batch(&keys_collection, batch)
-            .with_context(|| format!("Failed to flush batch for {}", file_name))?;
+    for (collection_name, batch) in batch_map {
+        if term_token.load(Ordering::Relaxed) {
+            bail!("Terminated at flushing for {}", file_name);
+        }
+
+        let count = batch.len();
+        println!("{}: flushing {} to {}", file_name, count, collection_name);
+        store.write(&collection_name, batch).with_context(|| {
+            format!(
+                "Failed to flush {} to {} for {}",
+                count, collection_name, file_name
+            )
+        })?;
     }
 
     Ok(())
-}
-
-fn write_batch(
-    keys_collection: &mongodb::sync::Collection,
-    batch: impl IntoIterator<Item = bson::Document>,
-) -> Result<()> {
-    let options = mongodb::options::InsertManyOptions::builder()
-        .ordered(false)
-        .build();
-
-    const DUPLICATE_KEY_ERROR_CODE: i32 = 11000;
-    match keys_collection.insert_many(batch, options) {
-        Ok(_) => Ok(()),
-        Err(e)
-            if matches!(
-                e.kind.as_ref(),
-                mongodb::error::ErrorKind::BulkWriteError(f)
-                if f.write_concern_error.is_none()
-                    && f.write_errors.as_ref().map(|b| b.iter().all(|e| e.code == DUPLICATE_KEY_ERROR_CODE)).unwrap_or(false)
-            ) =>
-        {
-            Ok(())
-        }
-        Err(e) => Err(anyhow!(e)),
-    }
 }
 
 struct ParseContext<'a> {
