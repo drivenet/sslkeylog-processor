@@ -11,20 +11,15 @@ Run the built binary to determine the command-line options.
 On Windows, file names support [globbing](https://docs.rs/glob/), on other OSes shell expansion is expected to take care of that.
 
 # Schema
-All keys are placed in the `keys` collection with the following schema:
+All keys are placed in the collections named `keys_<server_ip>_<server_port>_<sni>` with the following schema:
 ```javascript
 {
-  _id: {
-    "r": <server_random>:BinData,
-    "i": <server_ip>:int/BinData,
-    "p": <server_port>:int,
-  },
+  _id: <client_random>:BinData,
   "t": <timestamp>:DateTime,
-  "h": <sni>:string,
-  "r": <client_random>:BinData,
+  "r": <server_random>:BinData,
   "i": <client_ip>:int/BinData,
   "p": <client_port>:int,
   "c": <cipher_id>:int,
-  "p": <premaster>:BinData,
+  "k": <premaster>:BinData,
 }
 ```
