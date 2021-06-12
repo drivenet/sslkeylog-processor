@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub(crate) fn get_paths<'a, Patterns>(patterns: Patterns) -> Result<impl Iterator<Item = PathBuf>>
 where
     Patterns: IntoIterator,
@@ -18,7 +18,7 @@ where
         .into_iter())
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 pub(crate) fn get_paths<'a, Patterns>(patterns: Patterns) -> Result<impl Iterator<Item = PathBuf>>
 where
     Patterns: IntoIterator,
