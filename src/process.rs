@@ -115,7 +115,7 @@ where
         };
 
         let collection_name = format!(
-            "{}_{}_{}_{}",
+            "{}_{}:{}_{}",
             KEYS_COLLECTION_PREFIX, record.server_ip, record.server_port, record.sni
         );
         let batch = batch_map
