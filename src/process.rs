@@ -108,12 +108,6 @@ where
         let record = datamodel::Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", context))?;
 
-        //  This "normalizes" SNI as DNS name
-        let record = datamodel::Record {
-            sni: record.sni.trim_end_matches('.').to_lowercase(),
-            ..record
-        };
-
         let collection_name = format!(
             "{}_{}:{}_{}",
             KEYS_COLLECTION_PREFIX, record.server_ip, record.server_port, record.sni

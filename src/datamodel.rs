@@ -1,9 +1,10 @@
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, time::Duration};
 
-use anyhow::Context;
+use anyhow::{bail, ensure, Context, Result};
 use chrono::{DateTime, Utc};
 use mongodb::bson::{self, doc};
 use regex::Regex;
+use url::{self, Host, Url};
 
 use crate::to_bson::ToBson;
 
@@ -87,17 +88,113 @@ impl TryFrom<&str> for Record {
         let premaster = hex::decode(premaster)
             .with_context(|| format!("Invalid premaster secret {}", premaster))?;
 
+        let sni = parse_sni(sni, server_ip, server_port)
+            .with_context(|| format!("Invalid SNI {}", sni))?;
         Ok(Record {
             timestamp,
             client_ip,
             client_port,
             server_ip,
             server_port,
-            sni: sni.to_string(),
+            sni,
             cipher_id,
             server_random,
             client_random,
             premaster,
         })
+    }
+}
+
+fn parse_sni(sni: &str, server_ip: IpAddr, server_port: u16) -> Result<String> {
+    if sni.is_empty() {
+        return Ok(String::new());
+    }
+
+    let url = format!("https://{}/", sni);
+    let url = Url::parse(&url).context("Invalid SNI format")?;
+    ensure!(
+        url.username().is_empty()
+            && url.password().is_none()
+            && url.path() == "/"
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        "Unexpected SNI format"
+    );
+
+    if let Some(port) = url.port() {
+        ensure!(
+            port == server_port,
+            "Mismatching port, expected {}, got {}",
+            server_port,
+            port
+        );
+    }
+
+    Ok(match url.host() {
+        Some(Host::Ipv4(a)) => {
+            ensure!(
+                a == server_ip,
+                "Mismatching IPv4 address, expected {}, got {}",
+                server_ip,
+                a
+            );
+            ""
+        }
+        Some(Host::Ipv6(a)) => {
+            ensure!(
+                a == server_ip,
+                "Mismatching IPv6 address, expected {}, got {}",
+                server_ip,
+                a
+            );
+            ""
+        }
+        Some(Host::Domain(d)) => d.trim_end_matches('.'),
+        None => bail!("Missing host"),
+    }
+    .to_string())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn parse_sni_test(sni: &str, server_ip: &str, server_port: u16) -> String {
+        parse_sni(sni, IpAddr::from_str(server_ip).unwrap(), server_port).unwrap()
+    }
+
+    #[test]
+    fn parse_sni_normalizes_domain() {
+        assert_eq!(
+            "some-sni.host.domain",
+            parse_sni_test("some-SNI.HoSt.DoMain.", "127.0.0.1", 443)
+        );
+    }
+
+    #[test]
+    fn parse_sni_normalizes_ips() {
+        assert_eq!("", parse_sni_test("192.168.88.17", "192.168.88.17", 443));
+        assert_eq!("", parse_sni_test("127.000.0.1:587", "127.0.0.1", 587));
+        assert_eq!("", parse_sni_test("8.007.132.66:443", "8.7.132.66", 443));
+    }
+
+    #[test]
+    #[should_panic]
+    fn parse_sni_fails_on_invalid_hosts() {
+        parse_sni_test("just-a-host.com/some-url#fragment", "127.0.0.1", 80);
+    }
+
+    #[test]
+    #[should_panic]
+    fn parse_sni_fails_on_invalid_port() {
+        parse_sni_test("just-a-host.com:1193", "127.0.0.1", 80);
+    }
+
+    #[test]
+    fn parse_sni_doesnt_fail_on_invalid_implicit_port() {
+        assert_eq!(
+            "just-a-host.com",
+            parse_sni_test("just-a-host.com", "127.0.0.1", 80,)
+        );
     }
 }
