@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 
 use anyhow::{anyhow, bail, Context, Result};
+use regex::Regex;
 
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -9,6 +10,7 @@ pub(crate) struct Configuration {
     pub files: Vec<String>,
     pub options: mongodb::options::ClientOptions,
     pub db_name: String,
+    pub sni_filter: Option<Regex>,
 }
 
 pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
@@ -20,6 +22,12 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         "connection",
         "set connection string, start with @ to load from file",
         "mongodb://.../dbname?params... | @file",
+    );
+    opts.optopt(
+        "f",
+        "filter",
+        "set fitler regex, strict (/^...$/)",
+        "www\\.domain\\.(com|net)",
     );
 
     let program = args[0].as_ref().to_string_lossy();
@@ -45,6 +53,12 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         print_usage(&program, &opts);
         anyhow!("Missing connection string")
     })?;
+
+    let sni_filter = matches
+        .opt_str("f")
+        .map(|f| Regex::new(&format!("^{}$", f)))
+        .transpose()
+        .context("Invalid SNI filter")?;
 
     let files = matches.free;
     if files.is_empty() {
@@ -84,6 +98,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         files,
         options,
         db_name,
+        sni_filter,
     }))
 }
 

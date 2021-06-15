@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use mongodb::bson;
+use regex::Regex;
 
 use crate::{configuration, datamodel, filesystem, storage::Store};
 
@@ -30,7 +31,13 @@ pub(crate) fn process(
             bail!("Terminated at path iteration");
         }
 
-        process_entry(&path, threshold, &mut store, &term_token)?;
+        process_entry(
+            &path,
+            threshold,
+            &mut store,
+            &term_token,
+            args.sni_filter.as_ref(),
+        )?;
     }
 
     Ok(())
@@ -41,6 +48,7 @@ fn process_entry(
     threshold: SystemTime,
     store: &mut Store,
     term_token: &Arc<AtomicBool>,
+    sni_filter: Option<&Regex>,
 ) -> Result<()> {
     let metadata = std::fs::metadata(path)
         .with_context(|| format!("Failed to get metadata for entry {}", path.display()))?;
@@ -55,7 +63,7 @@ fn process_entry(
         return Ok(());
     }
 
-    process_file(path, store, term_token)?;
+    process_file(path, store, term_token, sni_filter)?;
 
     Ok(())
 }
@@ -64,6 +72,7 @@ fn process_file(
     path: &std::path::Path,
     store: &mut Store,
     term_token: &Arc<AtomicBool>,
+    sni_filter: Option<&Regex>,
 ) -> Result<()> {
     let file_name = &path.display();
 
@@ -71,7 +80,7 @@ fn process_file(
     let file =
         std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
     let lines = std::io::BufReader::new(file).lines();
-    process_lines(lines, file_name, store, term_token)?;
+    process_lines(lines, file_name, store, term_token, sni_filter)?;
 
     std::fs::remove_file(&path)
         .with_context(|| format!("Failed to remove file {}", path.display()))?;
@@ -85,6 +94,7 @@ fn process_lines<'a, Lines, Line, Error>(
     file_name: &impl std::fmt::Display,
     store: &mut Store,
     term_token: &Arc<AtomicBool>,
+    sni_filter: Option<&Regex>,
 ) -> Result<()>
 where
     Lines: IntoIterator<Item = Result<Line, Error>>,
@@ -107,6 +117,13 @@ where
         let line = line.with_context(|| format!("Failed to read line at {}", context))?;
         let record = datamodel::Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", context))?;
+
+        if sni_filter
+            .map(|f| !f.is_match(&record.sni))
+            .unwrap_or(false)
+        {
+            continue;
+        }
 
         let collection_name = format!(
             "{}_{}:{}_{}",
