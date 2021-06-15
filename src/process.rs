@@ -14,7 +14,7 @@ use anyhow::{bail, Context, Result};
 use mongodb::bson;
 use regex::Regex;
 
-use crate::{configuration, datamodel, filesystem, storage::Store};
+use crate::{configuration, datamodel, filesystem, logging, storage::Store};
 
 const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
 const KEYS_COLLECTION_PREFIX: &str = "keys";
@@ -26,21 +26,29 @@ pub(crate) fn process(
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let mut store = Store::new(&db);
     let threshold = SystemTime::now() - MTIME_THRESHOLD;
+    let mut failure = None;
     for path in filesystem::get_paths(args.files)? {
         if term_token.load(Ordering::Relaxed) {
             bail!("Terminated at path iteration");
         }
 
-        process_entry(
+        if let Err(f) = process_entry(
             &path,
             threshold,
             &mut store,
             &term_token,
             args.sni_filter.as_ref(),
-        )?;
+        ) {
+            logging::print_error(&f);
+            if failure.is_none() {
+                failure = Some(f);
+            }
+        }
     }
 
-    Ok(())
+    failure
+        .map(|f| bail!(f.context("Failed to process files")))
+        .unwrap_or(Ok(()))
 }
 
 fn process_entry(
@@ -103,6 +111,7 @@ where
 {
     let mut batch_map = HashMap::<String, Vec<bson::Document>>::new();
     let mut line_num: u64 = 0;
+    let mut failure = None;
     for line in lines {
         line_num += 1;
         let context = ParseContext {
@@ -114,34 +123,11 @@ where
             bail!("Terminated at {}", context);
         }
 
-        let line = line.with_context(|| format!("Failed to read line at {}", context))?;
-        let record = datamodel::Record::try_from(line.as_ref())
-            .with_context(|| format!("Failed to parse at {}", context))?;
-
-        if sni_filter
-            .map(|f| !f.is_match(&record.sni))
-            .unwrap_or(false)
-        {
-            continue;
-        }
-
-        let collection_name = format!(
-            "{}_{}:{}_{}",
-            KEYS_COLLECTION_PREFIX, record.server_ip, record.server_port, record.sni
-        );
-        let batch = batch_map
-            .entry(collection_name.clone())
-            .or_insert_with(Vec::new);
-
-        batch.push(bson::Document::from(record));
-
-        const BATCH_SIZE: usize = 1000;
-        if batch.len() >= BATCH_SIZE {
-            println!("{}: writing to {}", file_name, collection_name);
-            let batch = batch_map.remove(&collection_name).unwrap();
-            store.write(&collection_name, batch).with_context(|| {
-                format!("Failed to write to {} for {}", collection_name, file_name)
-            })?;
+        if let Err(f) = process_line(&context, line, sni_filter, &mut batch_map, store) {
+            logging::print_error(&f);
+            if failure.is_none() {
+                failure = Some(f);
+            }
         }
     }
 
@@ -156,6 +142,52 @@ where
             format!(
                 "Failed to flush {} to {} for {}",
                 count, collection_name, file_name
+            )
+        })?;
+    }
+
+    failure
+        .map(|f| bail!(f.context(format!("Failed to process lines of {}", file_name))))
+        .unwrap_or(Ok(()))
+}
+
+fn process_line<'a, Line, Error>(
+    context: &ParseContext,
+    line: Result<Line, Error>,
+    sni_filter: Option<&Regex>,
+    batch_map: &mut HashMap<String, Vec<bson::Document>>,
+    store: &mut Store,
+) -> Result<()>
+where
+    Line: AsRef<str> + 'a,
+    Error: std::error::Error + Send + Sync + 'static,
+{
+    let line = line.with_context(|| format!("Failed to read line at {}", context))?;
+    let record = datamodel::Record::try_from(line.as_ref())
+        .with_context(|| format!("Failed to parse at {}", context))?;
+    if sni_filter
+        .map(|f| !f.is_match(&record.sni))
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    let collection_name = format!(
+        "{}_{}:{}_{}",
+        KEYS_COLLECTION_PREFIX, record.server_ip, record.server_port, record.sni
+    );
+    let batch = batch_map
+        .entry(collection_name.clone())
+        .or_insert_with(Vec::new);
+    batch.push(bson::Document::from(record));
+    const BATCH_SIZE: usize = 1000;
+    if batch.len() >= BATCH_SIZE {
+        println!("{}: writing to {}", context.file_name, collection_name);
+        let batch = batch_map.remove(&collection_name).unwrap();
+        store.write(&collection_name, batch).with_context(|| {
+            format!(
+                "Failed to write to {} for {}",
+                collection_name, context.file_name
             )
         })?;
     }
