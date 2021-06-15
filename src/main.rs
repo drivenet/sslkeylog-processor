@@ -1,6 +1,7 @@
 mod configuration;
 mod datamodel;
 mod filesystem;
+mod logging;
 mod process;
 mod storage;
 mod to_bson;
@@ -17,12 +18,7 @@ use anyhow::Context;
 
 fn main() {
     if let Err(err) = try_main() {
-        const SD_ERR: &str = "<3>";
-        let prefix = match std::env::var("INVOCATION_ID") {
-            Ok(_) => SD_ERR,
-            Err(_) => "",
-        };
-        eprintln!("{}Error: {:?}", prefix, err);
+        logging::print_error(&err);
         std::process::exit(1);
     }
 }
