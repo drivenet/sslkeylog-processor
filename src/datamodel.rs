@@ -6,7 +6,7 @@ use mongodb::bson::{self, doc};
 use regex::Regex;
 use url::{self, Host, Url};
 
-use crate::to_bson::ToBson;
+use crate::{logging, to_bson::ToBson};
 
 const TIME_TO_LIVE: Duration = Duration::from_secs(183 * 86400);
 
@@ -89,7 +89,15 @@ impl TryFrom<&str> for Record {
             .with_context(|| format!("Invalid premaster secret {}", premaster))?;
 
         let sni = parse_sni(sni, server_ip, server_port)
-            .with_context(|| format!("Invalid SNI {}", sni))?;
+            .with_context(|| format!("Invalid SNI {} in line {}", sni, value));
+        let sni = match sni {
+            Ok(v) => v,
+            Err(e) => {
+                logging::print_warning(&e);
+                String::new()
+            }
+        };
+
         Ok(Record {
             timestamp,
             client_ip,
