@@ -8,7 +8,21 @@ pub(crate) fn print_error<T: std::fmt::Debug>(err: &T) {
         };
     }
     let prefix: &str = &PREFIX;
-    eprintln!("{}Error: {:?}", prefix, err);
+    if prefix.is_empty() {
+        eprintln!("Error: {:?}", err);
+    } else {
+        let mut message = String::new();
+        for line in format!("Error: {:?}", err).lines() {
+            if !message.is_empty() {
+                message.push('\n');
+            }
+
+            message.push_str(prefix);
+            message.push_str(line);
+        }
+
+        eprintln!("{}", message);
+    }
 }
 
 #[cfg(not(unix))]
