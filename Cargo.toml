@@ -1,6 +1,6 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.2.7"
+version = "0.3.1"
 authors = ["Aristarkh Zagorodnikov <xm@drive.net>"]
 edition = "2018"
 
