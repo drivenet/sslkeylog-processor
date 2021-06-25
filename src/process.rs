@@ -17,7 +17,6 @@ use regex::Regex;
 use crate::{configuration, datamodel, filesystem, logging, storage::Store};
 
 const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
-const KEYS_COLLECTION_PREFIX: &str = "keys";
 
 pub(crate) fn process(
     args: configuration::Configuration,
