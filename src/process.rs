@@ -172,10 +172,7 @@ where
         return Ok(());
     }
 
-    let collection_name = format!(
-        "{}_{}:{}_{}",
-        KEYS_COLLECTION_PREFIX, record.server_ip, record.server_port, record.sni
-    );
+    let collection_name = format!("{}@{}:{}", record.sni, record.server_ip, record.server_port);
     let batch = batch_map
         .entry(collection_name.clone())
         .or_insert_with(Vec::new);
