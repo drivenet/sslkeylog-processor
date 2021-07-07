@@ -57,14 +57,8 @@ fn process_entry(
     term_token: &Arc<AtomicBool>,
     sni_filter: Option<&Regex>,
 ) -> Result<()> {
-    let metadata = std::fs::metadata(path)
-        .with_context(|| format!("Failed to get metadata for entry {}", path.display()))?;
-    if !metadata.is_file() {
-        return Ok(());
-    }
-
-    let mtime = metadata
-        .modified()
+    let mtime = std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
         .with_context(|| format!("Failed to get mtime for file {}", path.display()))?;
     if mtime > threshold {
         return Ok(());
