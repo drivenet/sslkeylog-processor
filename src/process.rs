@@ -24,20 +24,14 @@ pub(crate) fn process(
 ) -> Result<()> {
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let mut store = Store::new(&db);
-    let threshold = SystemTime::now() - MTIME_THRESHOLD;
+    let sni_filter = args.sni_filter.as_ref();
     let mut failure = None;
     for path in filesystem::get_paths(args.files)? {
         if term_token.load(Ordering::Relaxed) {
             bail!("Terminated at path iteration");
         }
 
-        if let Err(f) = process_entry(
-            &path,
-            threshold,
-            &mut store,
-            term_token,
-            args.sni_filter.as_ref(),
-        ) {
+        if let Err(f) = process_entry(&path, &mut store, term_token, sni_filter) {
             logging::print_error(&f);
             if failure.is_none() {
                 failure = Some(f);
@@ -52,7 +46,6 @@ pub(crate) fn process(
 
 fn process_entry(
     path: &std::path::Path,
-    threshold: SystemTime,
     store: &mut Store,
     term_token: &Arc<AtomicBool>,
     sni_filter: Option<&Regex>,
@@ -60,7 +53,7 @@ fn process_entry(
     let mtime = std::fs::metadata(path)
         .and_then(|metadata| metadata.modified())
         .with_context(|| format!("Failed to get mtime for file {}", path.display()))?;
-    if mtime > threshold {
+    if mtime > SystemTime::now() - MTIME_THRESHOLD {
         return Ok(());
     }
 
@@ -107,16 +100,16 @@ where
     let mut failure = None;
     for line in lines {
         line_num += 1;
-        let context = ParseContext {
+        let location = FileLocation {
             file_name,
             line_num,
         };
 
         if term_token.load(Ordering::Relaxed) {
-            bail!("Terminated at {}", context);
+            bail!("Terminated at {}", location);
         }
 
-        if let Err(f) = process_line(&context, line, sni_filter, &mut batch_map, store) {
+        if let Err(f) = process_line(&location, line, sni_filter, &mut batch_map, store) {
             logging::print_error(&f);
             if failure.is_none() {
                 failure = Some(f);
@@ -145,7 +138,7 @@ where
 }
 
 fn process_line<'a, Line, Error>(
-    context: &ParseContext,
+    location: &FileLocation,
     line: Result<Line, Error>,
     sni_filter: Option<&Regex>,
     batch_map: &mut HashMap<String, Vec<bson::Document>>,
@@ -155,9 +148,9 @@ where
     Line: AsRef<str> + 'a,
     Error: std::error::Error + Send + Sync + 'static,
 {
-    let line = line.with_context(|| format!("Failed to read line at {}", context))?;
+    let line = line.with_context(|| format!("Failed to read line at {}", location))?;
     let record = datamodel::Record::try_from(line.as_ref())
-        .with_context(|| format!("Failed to parse at {}", context))?;
+        .with_context(|| format!("Failed to parse at {}", location))?;
     if sni_filter
         .map(|f| !f.is_match(&record.sni))
         .unwrap_or(false)
@@ -172,12 +165,12 @@ where
     batch.push(bson::Document::from(&record));
     const BATCH_SIZE: usize = 1000;
     if batch.len() >= BATCH_SIZE {
-        println!("{}: writing to {}", context.file_name, collection_name);
+        println!("{}: writing to {}", location.file_name, collection_name);
         let batch = batch_map.remove(&collection_name).unwrap();
         store.write(&collection_name, batch).with_context(|| {
             format!(
                 "Failed to write to {} for {}",
-                collection_name, context.file_name
+                collection_name, location.file_name
             )
         })?;
     }
@@ -185,12 +178,12 @@ where
     Ok(())
 }
 
-struct ParseContext<'a> {
+struct FileLocation<'a> {
     pub file_name: &'a dyn std::fmt::Display,
     pub line_num: u64,
 }
 
-impl std::fmt::Display for ParseContext<'_> {
+impl std::fmt::Display for FileLocation<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}:{}", self.file_name, self.line_num))
     }
