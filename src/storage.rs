@@ -11,7 +11,7 @@ use mongodb::{
 
 use crate::datamodel;
 
-pub struct Store<'a> {
+pub(crate) struct Store<'a> {
     db: &'a Database,
     collections: HashMap<String, Collection>,
 }
