@@ -23,6 +23,11 @@ pub(crate) struct Record {
     pub premaster: Vec<u8>,
 }
 
+pub(crate) struct EnrichedRecord<'a> {
+    pub record: &'a Record,
+    pub region_id: u32,
+}
+
 pub(crate) fn get_index_model() -> Vec<bson::Document> {
     vec![doc! {
         "key": doc! { "t" : 1 },
@@ -42,6 +47,14 @@ impl From<&Record> for bson::Document {
             "r": record.server_random.to_bson(),
             "k": record.premaster.to_bson(),
         }
+    }
+}
+
+impl<'a> From<&EnrichedRecord<'a>> for bson::Document {
+    fn from(record: &EnrichedRecord) -> Self {
+        let mut document = Self::from(record.record);
+        document.insert("g", record.region_id);
+        document
     }
 }
 
