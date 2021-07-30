@@ -169,7 +169,7 @@ where
     let batch = batch_map
         .entry(collection_name.clone())
         .or_insert_with(Vec::new);
-    batch.push(bson::Document::from(record));
+    batch.push(bson::Document::from(&record));
     const BATCH_SIZE: usize = 1000;
     if batch.len() >= BATCH_SIZE {
         println!("{}: writing to {}", context.file_name, collection_name);

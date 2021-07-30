@@ -31,8 +31,8 @@ pub(crate) fn get_index_model() -> Vec<bson::Document> {
     }]
 }
 
-impl From<Record> for bson::Document {
-    fn from(record: Record) -> Self {
+impl From<&Record> for bson::Document {
+    fn from(record: &Record) -> Self {
         doc! {
             "_id": record.client_random.to_bson(),
             "c": record.cipher_id as i32,
