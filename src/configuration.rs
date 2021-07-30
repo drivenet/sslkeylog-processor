@@ -72,7 +72,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         let content = std::str::from_utf8(&content)
             .with_context(|| format!("Broken connection string encoding in file {}", cs_name))?;
         content
-            .strip_prefix("\u{FEFF}")
+            .strip_prefix('\u{FEFF}')
             .unwrap_or(content)
             .trim()
             .to_owned()

@@ -35,7 +35,7 @@ pub(crate) fn process(
             &path,
             threshold,
             &mut store,
-            &term_token,
+            term_token,
             args.sni_filter.as_ref(),
         ) {
             logging::print_error(&f);
