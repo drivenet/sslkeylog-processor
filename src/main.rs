@@ -3,6 +3,7 @@ mod datamodel;
 mod filesystem;
 mod logging;
 mod process;
+mod processor;
 mod storage;
 mod to_bson;
 
