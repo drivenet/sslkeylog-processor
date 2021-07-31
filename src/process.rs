@@ -1,8 +1,8 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
-use crate::{configuration, processor, storage};
+use crate::{configuration, geolocator, processor, storage};
 
 pub(crate) fn process(
     args: configuration::Configuration,
@@ -10,6 +10,20 @@ pub(crate) fn process(
 ) -> Result<()> {
     let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
     let mut store = storage::Store::new(&db);
-    let mut context = processor::Processor::new(args.sni_filter.as_ref(), term_token, &mut store);
+    let geolocator = args
+        .geodb_path
+        .map(|p| {
+            let path = &p;
+            geolocator::Geolocator::new(path).with_context(|| {
+                format!("Failed to create geolocator with database path {:?}", path)
+            })
+        })
+        .transpose()?;
+    let mut context = processor::Processor::new(
+        args.sni_filter.as_ref(),
+        term_token,
+        &mut store,
+        geolocator.as_ref(),
+    );
     context.process(args.files)
 }

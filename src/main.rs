@@ -1,6 +1,7 @@
 mod configuration;
 mod datamodel;
 mod filesystem;
+mod geolocator;
 mod logging;
 mod process;
 mod processor;

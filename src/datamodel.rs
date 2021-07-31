@@ -25,7 +25,7 @@ pub(crate) struct Record {
 
 pub(crate) struct EnrichedRecord<'a> {
     pub record: &'a Record,
-    pub region_id: u32,
+    pub geoname_id: u32,
 }
 
 pub(crate) fn get_index_model() -> Vec<bson::Document> {
@@ -53,7 +53,7 @@ impl From<&Record> for bson::Document {
 impl<'a> From<&EnrichedRecord<'a>> for bson::Document {
     fn from(record: &EnrichedRecord) -> Self {
         let mut document = Self::from(record.record);
-        document.insert("g", record.region_id);
+        document.insert("g", record.geoname_id);
         document
     }
 }

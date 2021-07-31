@@ -14,7 +14,13 @@ use anyhow::{bail, Context, Result};
 use mongodb::bson;
 use regex::Regex;
 
-use crate::{datamodel, filesystem, logging, storage::Store};
+use crate::{
+    datamodel::{EnrichedRecord, Record},
+    filesystem,
+    geolocator::Geolocator,
+    logging,
+    storage::Store,
+};
 
 const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
 
@@ -22,6 +28,7 @@ pub(crate) struct Processor<'a> {
     sni_filter: Option<&'a Regex>,
     term_token: &'a Arc<AtomicBool>,
     store: &'a mut Store<'a>,
+    geolocator: Option<&'a Geolocator>,
 }
 
 impl<'a> Processor<'a> {
@@ -29,11 +36,13 @@ impl<'a> Processor<'a> {
         sni_filter: Option<&'a Regex>,
         term_token: &'a Arc<AtomicBool>,
         store: &'a mut Store<'a>,
+        geolocator: Option<&'a Geolocator>,
     ) -> Self {
         Self {
             sni_filter,
             term_token,
             store,
+            geolocator,
         }
     }
 
@@ -153,7 +162,7 @@ impl<'a> Processor<'a> {
         Error: std::error::Error + Send + Sync + 'static,
     {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
-        let record = datamodel::Record::try_from(line.as_ref())
+        let record = Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", location))?;
         if self
             .sni_filter
@@ -163,11 +172,34 @@ impl<'a> Processor<'a> {
             return Ok(());
         }
 
+        let geolocation = self
+            .geolocator
+            .map(|g| {
+                g.locate(record.client_ip).with_context(|| {
+                    format!(
+                        "Failed to geolocate client {} at {}",
+                        record.client_ip, location
+                    )
+                })
+            })
+            .transpose()?
+            .flatten();
+
         let collection_name = format!("{}@{}:{}", record.sni, record.server_ip, record.server_port);
         let batch = batch_map
             .entry(collection_name.clone())
             .or_insert_with(Vec::new);
-        batch.push(bson::Document::from(&record));
+
+        let document = match geolocation {
+            Some(geoname_id) => bson::Document::from(&EnrichedRecord {
+                record: &record,
+                geoname_id,
+            }),
+            None => bson::Document::from(&record),
+        };
+
+        batch.push(document);
+
         const BATCH_SIZE: usize = 1000;
         if batch.len() >= BATCH_SIZE {
             println!("{}: writing to {}", location.file_name, collection_name);

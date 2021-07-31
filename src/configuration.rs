@@ -11,6 +11,7 @@ pub(crate) struct Configuration {
     pub options: mongodb::options::ClientOptions,
     pub db_name: String,
     pub sni_filter: Option<Regex>,
+    pub geodb_path: Option<String>,
 }
 
 pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
@@ -28,6 +29,12 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         "filter",
         "set filter regex, strict (/^...$/)",
         "www\\.domain\\.(com|net)",
+    );
+    opts.optopt(
+        "g",
+        "geo-db",
+        "set geolocation database path, strict (/^...$/)",
+        "/path/to/GeoLite2-City.mmdb",
     );
 
     let program = args[0].as_ref().to_string_lossy();
@@ -59,6 +66,8 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         .map(|f| Regex::new(&format!("^{}$", f)))
         .transpose()
         .context("Invalid SNI filter")?;
+
+    let geodb_path = matches.opt_str("g");
 
     let files = matches.free;
     if files.is_empty() {
@@ -99,6 +108,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         options,
         db_name,
         sni_filter,
+        geodb_path,
     }))
 }
 
