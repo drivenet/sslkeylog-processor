@@ -26,7 +26,7 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     opts.optopt(
         "f",
         "filter",
-        "set fitler regex, strict (/^...$/)",
+        "set filter regex, strict (/^...$/)",
         "www\\.domain\\.(com|net)",
     );
 
