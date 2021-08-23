@@ -16,7 +16,7 @@ use regex::Regex;
 
 use crate::{
     datamodel::{EnrichedRecord, Record},
-    filesystem,
+    errors, filesystem,
     geolocator::Geolocator,
     logging,
     storage::Store,
@@ -54,7 +54,7 @@ impl<'a> Processor<'a> {
         let mut failure = None;
         for path in filesystem::get_paths(patterns)? {
             if self.term_token.load(Ordering::Relaxed) {
-                bail!("Terminated at path iteration");
+                bail!(errors::TerminatedError::from_str("path iteration"));
             }
 
             if let Err(f) = self.process_entry(&path) {
@@ -120,7 +120,10 @@ impl<'a> Processor<'a> {
             };
 
             if self.term_token.load(Ordering::Relaxed) {
-                bail!("Terminated at {}", location);
+                bail!(errors::TerminatedError::new(format!(
+                    "processing {}",
+                    location
+                )));
             }
 
             if let Err(f) = self.process_line(&location, line, &mut batch_map) {
@@ -133,7 +136,10 @@ impl<'a> Processor<'a> {
 
         for (collection_name, batch) in batch_map {
             if self.term_token.load(Ordering::Relaxed) {
-                bail!("Terminated at flushing for {}", file_name);
+                bail!(errors::TerminatedError::new(format!(
+                    "flushing for {}",
+                    file_name
+                )));
             }
 
             let count = batch.len();

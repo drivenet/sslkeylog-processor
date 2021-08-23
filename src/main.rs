@@ -1,5 +1,6 @@
 mod configuration;
 mod datamodel;
+mod errors;
 mod filesystem;
 mod geolocator;
 mod logging;
@@ -20,6 +21,11 @@ use anyhow::Context;
 
 fn main() {
     if let Err(err) = try_main() {
+        if err.is::<errors::TerminatedError>() {
+            logging::print_warning(&err);
+            return;
+        }
+
         logging::print_error(&err);
         std::process::exit(1);
     }
