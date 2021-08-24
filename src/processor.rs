@@ -22,7 +22,8 @@ use crate::{
     storage::Store,
 };
 
-const MTIME_THRESHOLD: Duration = Duration::from_secs(60);
+// Assume that 5 seconds are enough for sslkeylog to finish writing
+const CTIME_THRESHOLD: Duration = Duration::from_secs(65);
 
 pub(crate) struct Processor<'a> {
     sni_filter: Option<&'a Regex>,
@@ -71,10 +72,10 @@ impl<'a> Processor<'a> {
     }
 
     fn process_entry(&mut self, path: &std::path::Path) -> Result<()> {
-        let mtime = std::fs::metadata(path)
-            .and_then(|metadata| metadata.modified())
-            .with_context(|| format!("Failed to get mtime for file {}", path.display()))?;
-        if mtime > SystemTime::now() - MTIME_THRESHOLD {
+        let ctime = std::fs::metadata(path)
+            .and_then(|metadata| metadata.created())
+            .with_context(|| format!("Failed to get ctime for file {}", path.display()))?;
+        if ctime > SystemTime::now() - CTIME_THRESHOLD {
             return Ok(());
         }
 
