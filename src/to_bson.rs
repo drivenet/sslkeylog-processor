@@ -18,7 +18,7 @@ impl ToBson for Vec<u8> {
 impl ToBson for IpAddr {
     fn to_bson(&self) -> Bson {
         match self {
-            IpAddr::V4(a) => Bson::from(u32::from(*a)),
+            IpAddr::V4(a) => Bson::from(u32::from(*a) as i32),
             IpAddr::V6(a) => Bson::from(bson::Binary {
                 subtype: bson::spec::BinarySubtype::UserDefined(0),
                 bytes: a.octets().to_vec(),
