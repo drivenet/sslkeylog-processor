@@ -5,18 +5,19 @@ authors = ["Aristarkh Zagorodnikov <xm@drive.net>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.41"
+anyhow = "1.0.44"
 regex = "1.5.4"
-chrono = "0.4.0"
-mongodb = { version = "1.2.2", default-features = false, features = ["sync"] }
+chrono = "0.4.19"
+bson = { version = "2.0.0", features = ["chrono-0_4"] }
+mongodb = { version = "2.0.0", default-features = false, features = ["sync"] }
 hex = "0.4.3"
 lazy_static = "1.4.0"
 getopts = "0.2.21"
 url = "2.2.2"
-maxminddb = "0.17"
+maxminddb = "0.21.0"
 
 [target.'cfg(unix)'.dependencies]
-signal-hook = "0.3.9"
+signal-hook = "0.3.10"
 
 [target.'cfg(windows)'.dependencies]
 glob = "0.3.0"

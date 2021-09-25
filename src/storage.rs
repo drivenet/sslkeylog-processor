@@ -13,7 +13,7 @@ use crate::datamodel;
 
 pub(crate) struct Store<'a> {
     db: &'a Database,
-    collections: HashMap<String, Collection>,
+    collections: HashMap<String, Collection<bson::Document>>,
 }
 
 impl<'a> Store<'a> {
@@ -44,7 +44,7 @@ impl<'a> Store<'a> {
             Err(e)
                 if matches!(
                     e.kind.as_ref(),
-                    mongodb::error::ErrorKind::BulkWriteError(f)
+                    mongodb::error::ErrorKind::BulkWrite(f)
                     if f.write_concern_error.is_none()
                         && f.write_errors.as_ref().map(|b| b.iter().all(|e| e.code == DUPLICATE_KEY_ERROR_CODE)).unwrap_or(false)
                 ) =>
@@ -56,7 +56,7 @@ impl<'a> Store<'a> {
     }
 }
 
-fn create_collection(db: &Database, name: &str) -> Result<Collection> {
+fn create_collection(db: &Database, name: &str) -> Result<Collection<bson::Document>> {
     let c = db.collection(name);
     let command = doc! {
         "createIndexes": c.name(),
