@@ -29,22 +29,28 @@ pub(crate) struct EnrichedRecord<'a> {
 }
 
 pub(crate) fn get_index_model() -> Vec<bson::Document> {
-    vec![doc! {
-        "key": doc! { "t" : 1 },
-        "name": "expiration",
-        "expireAfterSeconds": TIME_TO_LIVE.as_secs() as i64,
-    }]
+    vec![
+        doc! {
+            "key": doc! { "r" : 1 },
+            "name": "random",
+        },
+        doc! {
+            "key": doc! { "t" : 1 },
+            "name": "expiration",
+            "expireAfterSeconds": TIME_TO_LIVE.as_secs() as i64,
+        },
+    ]
 }
 
 impl From<&Record> for bson::Document {
     fn from(record: &Record) -> Self {
         doc! {
-            "_id": record.client_random.to_bson(),
+            "_id": record.server_random.to_bson(),
             "c": record.cipher_id as i32,
             "t": record.timestamp,
             "i": record.client_ip.to_bson(),
             "p": record.client_port as i32,
-            "r": record.server_random.to_bson(),
+            "r": record.client_random.to_bson(),
             "k": record.premaster.to_bson(),
         }
     }

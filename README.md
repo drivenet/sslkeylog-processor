@@ -15,9 +15,9 @@ The tool optionally supports [MaxMind geolocation database](https://www.maxmind.
 All keys are placed in the collections named `<sni>@<server_ip>:<server_port>` with the following schema:
 ```javascript
 {
-  _id: <client_random>:BinData,
+  _id: <server_random>:BinData,
   "t": <timestamp>:DateTime,
-  "r": <server_random>:BinData,
+  "r": <client_random>:BinData,
   "i": <client_ip>:int/BinData,
   "p": <client_port>:int,
   "c": <cipher_id>:int,
