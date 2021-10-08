@@ -47,7 +47,7 @@ fn try_main() -> Result<()> {
 
 #[cfg(unix)]
 fn register_signal(token: &Arc<AtomicBool>) -> Result<()> {
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&token))
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(token))
         .map(|_| ())
         .context("Failed to register signal")
 }
