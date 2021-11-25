@@ -1,15 +1,17 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.5.3"
+version = "0.5.4"
 authors = ["Aristarkh Zagorodnikov <xm@drive.net>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.44"
+anyhow = "1.0.48"
 regex = "1.5.4"
 chrono = "0.4.19"
-bson = { version = "2.0.0", features = ["chrono-0_4"] }
-mongodb = { version = "2.0.0", default-features = false, features = ["sync"] }
+mongodb = { version = "2.0.2", default-features = false, features = [
+    "sync",
+    "bson-chrono-0_4",
+] }
 hex = "0.4.3"
 lazy_static = "1.4.0"
 getopts = "0.2.21"
