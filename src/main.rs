@@ -21,12 +21,11 @@ use anyhow::Context;
 
 fn main() {
     if let Err(err) = try_main() {
+        logging::print(&err);
         if err.is::<errors::TerminatedError>() {
-            logging::print_warning(&err);
             return;
         }
 
-        logging::print_error(&err);
         std::process::exit(1);
     }
 }

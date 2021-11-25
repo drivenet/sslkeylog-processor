@@ -61,3 +61,11 @@ pub(crate) fn print_warning<T: std::fmt::Debug>(err: &T) {
 pub(crate) fn print_warning<T: std::fmt::Debug>(err: &T) {
     println!("Warning: {:?}", err);
 }
+
+pub(crate) fn print(err: &anyhow::Error) {
+    if err.is::<crate::errors::TerminatedError>() {
+        print_warning(err);
+    } else {
+        print_error(err);
+    }
+}

@@ -59,7 +59,7 @@ impl<'a> Processor<'a> {
             }
 
             if let Err(f) = self.process_entry(&path) {
-                logging::print_error(&f);
+                logging::print(&f);
                 if failure.is_none() {
                     failure = Some(f);
                 }
@@ -128,7 +128,7 @@ impl<'a> Processor<'a> {
             }
 
             if let Err(f) = self.process_line(&location, line, &mut batch_map) {
-                logging::print_error(&f);
+                logging::print(&f);
                 if failure.is_none() {
                     failure = Some(f);
                 }
