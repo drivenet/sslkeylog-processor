@@ -5,15 +5,15 @@ use anyhow::{Context, Result};
 use crate::{configuration, geolocator, processor, storage};
 
 pub(crate) fn process(
-    args: configuration::Configuration,
+    args: &configuration::Configuration,
     term_token: &Arc<AtomicBool>,
 ) -> Result<()> {
-    let db = mongodb::sync::Client::with_options(args.options)?.database(&args.db_name);
+    let db = mongodb::sync::Client::with_options(args.options.clone())?.database(&args.db_name);
     let mut store = storage::Store::new(&db);
     let geolocator = args
         .geodb_path
-        .map(|p| {
-            let path = &p;
+        .as_ref()
+        .map(|path| {
             geolocator::Geolocator::new(path).with_context(|| {
                 format!("Failed to create geolocator with database path {:?}", path)
             })
@@ -25,5 +25,5 @@ pub(crate) fn process(
         &mut store,
         geolocator.as_ref(),
     );
-    context.process(args.files)
+    context.process(&args.files)
 }

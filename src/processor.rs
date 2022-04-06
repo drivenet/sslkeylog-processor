@@ -15,7 +15,7 @@ use mongodb::bson;
 use regex::Regex;
 
 use crate::{
-    datamodel::{EnrichedRecord, Record},
+    data_model::{EnrichedRecord, Record},
     errors, filesystem,
     geolocator::Geolocator,
     logging,
@@ -50,7 +50,7 @@ impl<'a> Processor<'a> {
     pub fn process<Patterns>(&mut self, patterns: Patterns) -> Result<()>
     where
         Patterns: IntoIterator,
-        Patterns::Item: AsRef<str> + 'a,
+        Patterns::Item: AsRef<str>,
     {
         let mut failure = None;
         for path in filesystem::get_paths(patterns)? {
@@ -107,7 +107,7 @@ impl<'a> Processor<'a> {
     ) -> Result<()>
     where
         Lines: IntoIterator<Item = Result<Line, Error>>,
-        Line: AsRef<str> + 'a,
+        Line: AsRef<str>,
         Error: std::error::Error + Send + Sync + 'static,
     {
         let mut batch_map = HashMap::<String, Vec<bson::Document>>::new();
@@ -158,16 +158,12 @@ impl<'a> Processor<'a> {
             .unwrap_or(Ok(()))
     }
 
-    fn process_line<Line, Error>(
+    fn process_line<Line: AsRef<str>, Error: std::error::Error + Send + Sync + 'static>(
         &mut self,
         location: &FileLocation,
         line: Result<Line, Error>,
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
-    ) -> Result<()>
-    where
-        Line: AsRef<str> + 'a,
-        Error: std::error::Error + Send + Sync + 'static,
-    {
+    ) -> Result<()> {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
         let record = Record::try_from(line.as_ref())
             .with_context(|| format!("Failed to parse at {}", location))?;

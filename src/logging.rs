@@ -7,7 +7,7 @@ pub(crate) fn print_error<T: std::fmt::Debug>(err: &T) {
             Err(_) => "",
         };
     }
-    let prefix: &str = &PREFIX;
+    let prefix = &PREFIX;
     if prefix.is_empty() {
         eprintln!("Error: {:?}", err);
     } else {
@@ -39,7 +39,7 @@ pub(crate) fn print_warning<T: std::fmt::Debug>(err: &T) {
             Err(_) => "",
         };
     }
-    let prefix: &str = &PREFIX;
+    let prefix = &PREFIX;
     if prefix.is_empty() {
         eprintln!("Warning: {:?}", err);
     } else {

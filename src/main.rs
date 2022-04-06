@@ -1,5 +1,5 @@
 mod configuration;
-mod datamodel;
+mod data_model;
 mod errors;
 mod filesystem;
 mod geolocator;
@@ -31,7 +31,7 @@ fn main() {
 }
 
 fn try_main() -> Result<()> {
-    let args = configuration::parse_args(&std::env::args().collect::<Vec<_>>())?;
+    let args = configuration::parse_args(std::env::args())?;
     let args = if let Some(args) = args {
         args
     } else {
@@ -40,7 +40,7 @@ fn try_main() -> Result<()> {
 
     let term_token = Arc::new(AtomicBool::new(false));
     register_signal(&term_token)?;
-    process::process(args, &term_token)?;
+    process::process(&args, &term_token)?;
     Ok(())
 }
 

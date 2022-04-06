@@ -14,7 +14,11 @@ pub(crate) struct Configuration {
     pub geodb_path: Option<String>,
 }
 
-pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configuration>> {
+pub(crate) fn parse_args<Args>(args: Args) -> Result<Option<Configuration>>
+where
+    Args: IntoIterator,
+    Args::Item: AsRef<OsStr>,
+{
     let mut opts = getopts::Options::new();
     opts.optflag("h", "help", "show this help");
     opts.optflag("v", "version", "check version");
@@ -37,8 +41,13 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
         "/path/to/GeoLite2-City.mmdb",
     );
 
-    let program = args[0].as_ref().to_string_lossy();
-    let matches = match opts.parse(&args[1..]) {
+    let mut args = args.into_iter();
+    let program = args
+        .next()
+        .map(|v| v.as_ref().to_string_lossy().to_string())
+        .unwrap_or_else(|| String::from("program"));
+    let args = args;
+    let matches = match opts.parse(args) {
         Ok(m) => m,
         Err(e) => {
             print_usage(&program, &opts);
@@ -112,10 +121,11 @@ pub(crate) fn parse_args(args: &[impl AsRef<OsStr>]) -> Result<Option<Configurat
     }))
 }
 
-fn print_usage(program: &str, opts: &getopts::Options) {
+fn print_usage(program: impl AsRef<str>, opts: &getopts::Options) {
     let brief = format!(
         "Usage: {} file1 [file2...fileN] [options]\nVersion: {}",
-        program, PACKAGE_VERSION
+        program.as_ref(),
+        PACKAGE_VERSION
     );
     print!("{}", opts.usage(&brief));
 }

@@ -8,10 +8,7 @@ pub(crate) struct Geolocator {
 }
 
 impl Geolocator {
-    pub fn new<P>(database: P) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
+    pub fn new<P: AsRef<Path>>(database: P) -> Result<Self> {
         Ok(Self {
             reader: Reader::open_readfile(database)?,
         })

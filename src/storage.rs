@@ -9,7 +9,7 @@ use mongodb::{
     sync::{Collection, Database},
 };
 
-use crate::datamodel;
+use crate::data_model;
 
 pub(crate) struct Store<'a> {
     db: &'a Database,
@@ -60,7 +60,7 @@ fn create_collection(db: &Database, name: &str) -> Result<Collection<bson::Docum
     let c = db.collection(name);
     let command = doc! {
         "createIndexes": c.name(),
-        "indexes": datamodel::get_index_model(),
+        "indexes": data_model::get_index_model(),
     };
     db.run_command(command, None)
         .context("Failed to create indexes")?;
