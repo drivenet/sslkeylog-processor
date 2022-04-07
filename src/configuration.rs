@@ -85,21 +85,15 @@ where
     };
 
     let connection_string = if let Some(cs_name) = connection_string.strip_prefix('@') {
-        let content = std::fs::read(cs_name)
-            .with_context(|| format!("Failed to read connection string from file {}", cs_name))?;
-        let content = std::str::from_utf8(&content)
-            .with_context(|| format!("Broken connection string encoding in file {}", cs_name))?;
-        content
-            .strip_prefix('\u{FEFF}')
-            .unwrap_or(content)
-            .trim()
-            .to_owned()
+        let content = std::fs::read(cs_name).with_context(|| format!("Failed to read connection string from file {}", cs_name))?;
+        let content =
+            std::str::from_utf8(&content).with_context(|| format!("Broken connection string encoding in file {}", cs_name))?;
+        content.strip_prefix('\u{FEFF}').unwrap_or(content).trim().to_owned()
     } else {
         connection_string
     };
 
-    let options = mongodb::options::ClientOptions::parse(&connection_string)
-        .context("Failed to parse connection string")?;
+    let options = mongodb::options::ClientOptions::parse(&connection_string).context("Failed to parse connection string")?;
 
     let db_name = connection_string
         .find("://")

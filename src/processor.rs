@@ -66,9 +66,7 @@ impl<'a> Processor<'a> {
             }
         }
 
-        failure
-            .map(|f| bail!(f.context("Failed to process files")))
-            .unwrap_or(Ok(()))
+        failure.map(|f| bail!(f.context("Failed to process files"))).unwrap_or(Ok(()))
     }
 
     fn process_entry(&mut self, path: &std::path::Path) -> Result<()> {
@@ -88,23 +86,17 @@ impl<'a> Processor<'a> {
         let file_name = &path.display();
 
         println!("{}: open", file_name);
-        let file = std::fs::File::open(path)
-            .with_context(|| format!("Failed to open file {}", file_name))?;
+        let file = std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
         let lines = std::io::BufReader::new(file).lines();
         self.process_lines(lines, file_name)?;
 
-        std::fs::remove_file(&path)
-            .with_context(|| format!("Failed to remove file {}", path.display()))?;
+        std::fs::remove_file(&path).with_context(|| format!("Failed to remove file {}", path.display()))?;
 
         println!("{}: done", file_name);
         Ok(())
     }
 
-    fn process_lines<Lines, Line, Error>(
-        &mut self,
-        lines: Lines,
-        file_name: &impl std::fmt::Display,
-    ) -> Result<()>
+    fn process_lines<Lines, Line, Error>(&mut self, lines: Lines, file_name: &impl std::fmt::Display) -> Result<()>
     where
         Lines: IntoIterator<Item = Result<Line, Error>>,
         Line: AsRef<str>,
@@ -115,16 +107,10 @@ impl<'a> Processor<'a> {
         let mut failure = None;
         for line in lines {
             line_num += 1;
-            let location = FileLocation {
-                file_name,
-                line_num,
-            };
+            let location = FileLocation { file_name, line_num };
 
             if self.term_token.load(Ordering::Relaxed) {
-                bail!(errors::TerminatedError::new(format!(
-                    "processing {}",
-                    location
-                )));
+                bail!(errors::TerminatedError::new(format!("processing {}", location)));
             }
 
             if let Err(f) = self.process_line(&location, line, &mut batch_map) {
@@ -137,20 +123,14 @@ impl<'a> Processor<'a> {
 
         for (collection_name, batch) in batch_map {
             if self.term_token.load(Ordering::Relaxed) {
-                bail!(errors::TerminatedError::new(format!(
-                    "flushing for {}",
-                    file_name
-                )));
+                bail!(errors::TerminatedError::new(format!("flushing for {}", file_name)));
             }
 
             let count = batch.len();
             println!("{}: flushing {} to {}", file_name, count, collection_name);
-            self.store.write(&collection_name, batch).with_context(|| {
-                format!(
-                    "Failed to flush {} to {} for {}",
-                    count, collection_name, file_name
-                )
-            })?;
+            self.store
+                .write(&collection_name, batch)
+                .with_context(|| format!("Failed to flush {} to {} for {}", count, collection_name, file_name))?;
         }
 
         failure
@@ -165,33 +145,22 @@ impl<'a> Processor<'a> {
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
     ) -> Result<()> {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
-        let record = Record::try_from(line.as_ref())
-            .with_context(|| format!("Failed to parse at {}", location))?;
-        if self
-            .sni_filter
-            .map(|f| !f.is_match(&record.sni))
-            .unwrap_or(false)
-        {
+        let record = Record::try_from(line.as_ref()).with_context(|| format!("Failed to parse at {}", location))?;
+        if self.sni_filter.map(|f| !f.is_match(&record.sni)).unwrap_or(false) {
             return Ok(());
         }
 
         let geolocation = self
             .geolocator
             .map(|g| {
-                g.locate(record.client_ip).with_context(|| {
-                    format!(
-                        "Failed to geolocate client {} at {}",
-                        record.client_ip, location
-                    )
-                })
+                g.locate(record.client_ip)
+                    .with_context(|| format!("Failed to geolocate client {} at {}", record.client_ip, location))
             })
             .transpose()?
             .flatten();
 
         let collection_name = format!("{}@{}:{}", record.sni, record.server_ip, record.server_port);
-        let batch = batch_map
-            .entry(collection_name.clone())
-            .or_insert_with(Vec::new);
+        let batch = batch_map.entry(collection_name.clone()).or_insert_with(Vec::new);
 
         let document = match geolocation {
             Some(geoname_id) => bson::Document::from(&EnrichedRecord {
@@ -207,12 +176,9 @@ impl<'a> Processor<'a> {
         if batch.len() >= BATCH_SIZE {
             println!("{}: writing to {}", location.file_name, collection_name);
             let batch = batch_map.remove(&collection_name).unwrap();
-            self.store.write(&collection_name, batch).with_context(|| {
-                format!(
-                    "Failed to write to {} for {}",
-                    collection_name, location.file_name
-                )
-            })?;
+            self.store
+                .write(&collection_name, batch)
+                .with_context(|| format!("Failed to write to {} for {}", collection_name, location.file_name))?;
         }
 
         Ok(())

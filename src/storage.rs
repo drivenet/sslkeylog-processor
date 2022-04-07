@@ -24,14 +24,8 @@ impl<'a> Store<'a> {
         }
     }
 
-    pub fn write(
-        &mut self,
-        collection_name: &str,
-        batch: impl IntoIterator<Item = bson::Document>,
-    ) -> Result<()> {
-        let options = mongodb::options::InsertManyOptions::builder()
-            .ordered(false)
-            .build();
+    pub fn write(&mut self, collection_name: &str, batch: impl IntoIterator<Item = bson::Document>) -> Result<()> {
+        let options = mongodb::options::InsertManyOptions::builder().ordered(false).build();
 
         let collection = match self.collections.entry(String::from(collection_name)) {
             Occupied(c) => &*c.into_mut(),
@@ -46,7 +40,9 @@ impl<'a> Store<'a> {
                     e.kind.as_ref(),
                     mongodb::error::ErrorKind::BulkWrite(f)
                     if f.write_concern_error.is_none()
-                        && f.write_errors.as_ref().map(|b| b.iter().all(|e| e.code == DUPLICATE_KEY_ERROR_CODE)).unwrap_or(false)
+                        && f.write_errors.as_ref()
+                            .map(|b| b.iter().all(|e| e.code == DUPLICATE_KEY_ERROR_CODE))
+                            .unwrap_or(false)
                 ) =>
             {
                 Ok(())
@@ -62,7 +58,6 @@ fn create_collection(db: &Database, name: &str) -> Result<Collection<bson::Docum
         "createIndexes": c.name(),
         "indexes": data_model::get_index_model(),
     };
-    db.run_command(command, None)
-        .context("Failed to create indexes")?;
+    db.run_command(command, None).context("Failed to create indexes")?;
     Ok(c)
 }
