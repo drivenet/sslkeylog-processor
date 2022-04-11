@@ -28,7 +28,7 @@ impl<'a> Store<'a> {
         let options = mongodb::options::InsertManyOptions::builder().ordered(false).build();
 
         let collection = match self.collections.entry(String::from(collection_name)) {
-            Occupied(c) => &*c.into_mut(),
+            Occupied(e) => e.into_mut(),
             Vacant(e) => e.insert(create_collection(self.db, collection_name)?),
         };
 
