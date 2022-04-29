@@ -1,14 +1,14 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Aristarkh Zagorodnikov <xm@x-infinity.com>"]
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.57"
 regex = "1.5.5"
 chrono = "0.4.19"
-mongodb = { version = "2.1.0", default-features = false, features = [
+mongodb = { version = "2.2.1", default-features = false, features = [
     "sync",
     "bson-chrono-0_4",
 ] }
