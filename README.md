@@ -27,4 +27,4 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>` w
 ```
 Each collection has the following indexes:
 1. `random` on the `r` field
-2. `expiration` on the `t` field with TTL of 183 days (see `datamodel::TIME_TO_LIVE`).
+2. `expiration` on the `t` field with TTL of 183 days (see `data_model::TIME_TO_LIVE`).
