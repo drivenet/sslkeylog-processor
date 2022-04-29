@@ -12,10 +12,7 @@ impl fmt::Display for TerminatedError {
 }
 
 impl TerminatedError {
-    pub(crate) fn new(stage: String) -> Self {
-        Self { stage }
-    }
-    pub(crate) fn from_str(stage: &str) -> Self {
-        Self::new(String::from(stage))
+    pub(crate) fn new<T: Into<String>>(stage: T) -> Self {
+        Self { stage: stage.into() }
     }
 }

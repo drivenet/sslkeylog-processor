@@ -55,7 +55,7 @@ impl<'a> Processor<'a> {
         let mut failure = None;
         for path in filesystem::get_paths(patterns)? {
             if self.term_token.load(Ordering::Relaxed) {
-                bail!(errors::TerminatedError::from_str("path iteration"));
+                bail!(errors::TerminatedError::new("path iteration"));
             }
 
             if let Err(f) = self.process_entry(&path) {
