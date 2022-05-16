@@ -154,7 +154,7 @@ impl<'a> Processor<'a> {
             .geolocator
             .map(|g| {
                 g.locate(record.client_ip)
-                    .with_context(|| format!("Failed to geolocate client {} at {}", record.client_ip, location))
+                    .with_context(|| format!("Failed to locate client {} at {}", record.client_ip, location))
             })
             .transpose()?
             .flatten();

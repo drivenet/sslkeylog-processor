@@ -3,7 +3,10 @@
     "rust-analyzer.checkOnSave.command": "clippy",
     "cSpell.words": [
         "bson",
+        "chrono",
+        "geodb",
         "geolocator",
+        "geoname",
         "premaster",
         "sslkeylog"
     ]
