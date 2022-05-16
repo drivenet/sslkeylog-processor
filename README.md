@@ -6,12 +6,12 @@ This is a tool to process logs produced by the [sslkeylog](https://github.com/dr
 
 [UPX](https://github.com/upx/upx) is used to reduce binary size, if you prefer not using it, just skip it.
 
-# Usage
+## Usage
 Run the built binary to determine the command-line options.
 On Windows, file names support [globbing](https://docs.rs/glob/), on other OSes shell expansion is expected to take care of that.
 The tool optionally supports [MaxMind geolocation database](https://www.maxmind.com/en/geoip2-databases) to store [GeoNames](https://www.geonames.org/) identifier.
 
-# Schema
+## Schema
 All keys are placed in the collections named `<sni>@<server_ip>:<server_port>` with the following schema:
 ```javascript
 {
