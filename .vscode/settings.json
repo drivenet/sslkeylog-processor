@@ -5,6 +5,7 @@
         "bson",
         "chrono",
         "geodb",
+        "geolocation",
         "geolocator",
         "geoname",
         "premaster",
