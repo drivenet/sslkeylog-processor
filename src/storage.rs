@@ -53,11 +53,11 @@ impl<'a> Store<'a> {
 }
 
 fn create_collection(db: &Database, name: &str) -> Result<Collection<bson::Document>> {
-    let c = db.collection(name);
+    let collection = db.collection(name);
     let command = doc! {
-        "createIndexes": c.name(),
+        "createIndexes": collection.name(),
         "indexes": data_model::get_index_model(),
     };
     db.run_command(command, None).context("Failed to create indexes")?;
-    Ok(c)
+    Ok(collection)
 }
