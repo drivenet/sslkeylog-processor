@@ -36,8 +36,7 @@ pub(crate) fn get_index_model() -> Vec<bson::Document> {
         },
         doc! {
             "key": doc! { "t" : 1 },
-            "name": "expiration",
-            "expireAfterSeconds": TIME_TO_LIVE.as_secs() as i64,
+            "name": "timestamp",
         },
     ]
 }

@@ -159,9 +159,6 @@ impl<'a> Processor<'a> {
             .transpose()?
             .flatten();
 
-        let collection_name = format!("{}@{}:{}", record.sni, record.server_ip, record.server_port);
-        let batch = batch_map.entry(collection_name.clone()).or_insert_with(Vec::new);
-
         let document = match geolocation {
             Some(geoname_id) => bson::Document::from(&EnrichedRecord {
                 record: &record,
@@ -170,17 +167,31 @@ impl<'a> Processor<'a> {
             None => bson::Document::from(&record),
         };
 
-        batch.push(document);
+        let collection_name = format!("{}@{}:{}", record.sni, record.server_ip, record.server_port);
+        let collection_name_monthly = format!("{}_{}", collection_name, record.timestamp.format("%Y%m"));
+        self.write_document(&collection_name, document.clone(), location, batch_map)?;
+        self.write_document(&collection_name_monthly, document, location, batch_map)?;
 
+        Ok(())
+    }
+
+    fn write_document(
+        &mut self,
+        collection_name: &str,
+        document: bson::Document,
+        location: &FileLocation,
+        batch_map: &mut HashMap<String, Vec<bson::Document>>,
+    ) -> Result<()> {
+        let batch = batch_map.entry(collection_name.to_string()).or_insert_with(Vec::new);
+        batch.push(document);
         const BATCH_SIZE: usize = 1000;
         if batch.len() >= BATCH_SIZE {
             println!("{}: writing to {}", location.file_name, collection_name);
-            let batch = batch_map.remove(&collection_name).unwrap();
+            let batch = batch_map.remove(collection_name).unwrap();
             self.store
-                .write(&collection_name, batch)
+                .write(collection_name, batch)
                 .with_context(|| format!("Failed to write to {} for {}", collection_name, location.file_name))?;
-        }
-
+        };
         Ok(())
     }
 }
