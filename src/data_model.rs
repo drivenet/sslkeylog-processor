@@ -8,8 +8,6 @@ use url::{self, Host, Url};
 
 use crate::{logging, to_bson::ToBson};
 
-const TIME_TO_LIVE: Duration = Duration::from_secs(183 * 86400);
-
 pub(crate) struct Record {
     pub timestamp: DateTime<Utc>,
     pub client_ip: IpAddr,
