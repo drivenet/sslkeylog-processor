@@ -1,6 +1,6 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.7.1"
+version = "0.7.2"
 authors = ["Aristarkh Zagorodnikov <xm@x-infinity.com>"]
 edition = "2021"
 
