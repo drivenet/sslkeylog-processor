@@ -16,9 +16,6 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 use anyhow::Result;
 
-#[cfg(unix)]
-use anyhow::Context;
-
 fn main() {
     if let Err(err) = try_main() {
         logging::print(&err);
@@ -47,6 +44,7 @@ fn try_main() -> Result<()> {
 fn register_signal(token: &Arc<AtomicBool>) -> Result<()> {
     #[cfg(unix)]
     {
+        use anyhow::Context;
         signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(token))
             .map(|_| ())
             .context("Failed to register signal")
