@@ -167,10 +167,14 @@ impl<'a> Processor<'a> {
             None => bson::Document::from(&record),
         };
 
-        let collection_name = format!("{}@{}:{}", record.sni, record.server_ip, record.server_port);
-        let collection_name_monthly = format!("{}_{}", collection_name, record.timestamp.format("%Y%m"));
-        self.write_document(&collection_name, document.clone(), location, batch_map)?;
-        self.write_document(&collection_name_monthly, document, location, batch_map)?;
+        let collection_name = format!(
+            "{}@{}:{}_{}",
+            record.sni,
+            record.server_ip,
+            record.server_port,
+            record.timestamp.format("%Y%m")
+        );
+        self.write_document(&collection_name, document, location, batch_map)?;
 
         Ok(())
     }
