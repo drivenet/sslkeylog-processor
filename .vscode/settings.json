@@ -9,6 +9,7 @@
         "geolocator",
         "geoname",
         "premaster",
+        "SIGTERM",
         "sslkeylog"
     ]
 }

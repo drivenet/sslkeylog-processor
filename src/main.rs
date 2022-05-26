@@ -1,7 +1,6 @@
 mod configuration;
 mod data_model;
 mod errors;
-mod filesystem;
 mod geolocator;
 mod logging;
 mod process;

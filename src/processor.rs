@@ -2,12 +2,11 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     io::BufRead,
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
-    time::SystemTime,
 };
 
 use anyhow::{bail, Context, Result};
@@ -16,14 +15,11 @@ use regex::Regex;
 
 use crate::{
     data_model::{EnrichedRecord, Record},
-    errors, filesystem,
+    errors,
     geolocator::Geolocator,
     logging,
     storage::Store,
 };
-
-// Assume that 5 seconds are enough for sslkeylog to finish writing
-const CTIME_THRESHOLD: Duration = Duration::from_secs(65);
 
 pub(crate) struct Processor<'a> {
     sni_filter: Option<&'a Regex>,
@@ -47,18 +43,19 @@ impl<'a> Processor<'a> {
         }
     }
 
-    pub fn process<Patterns>(&mut self, patterns: Patterns) -> Result<()>
+    pub fn process<Paths>(&mut self, paths: Paths) -> Result<()>
     where
-        Patterns: IntoIterator,
-        Patterns::Item: AsRef<str>,
+        Paths: IntoIterator,
+        Paths::Item: AsRef<str>,
     {
         let mut failure = None;
-        for path in filesystem::get_paths(patterns)? {
+        let mut batch_map = HashMap::<String, Vec<bson::Document>>::new();
+        for path in paths {
             if self.term_token.load(Ordering::Relaxed) {
                 bail!(errors::TerminatedError::new("path iteration"));
             }
 
-            if let Err(f) = self.process_entry(&path) {
+            if let Err(f) = self.process_file(&PathBuf::from(path.as_ref()), &mut batch_map) {
                 logging::print(&f);
                 if failure.is_none() {
                     failure = Some(f);
@@ -66,43 +63,43 @@ impl<'a> Processor<'a> {
             }
         }
 
+        for (collection_name, batch) in batch_map {
+            if self.term_token.load(Ordering::Relaxed) {
+                bail!(errors::TerminatedError::new("flushing"));
+            }
+
+            let count = batch.len();
+            println!("flushing {} to {}", count, collection_name);
+            self.store
+                .write(&collection_name, batch)
+                .with_context(|| format!("Failed to flush {} to {}", count, collection_name))?;
+        }
+
         failure.map(|f| bail!(f.context("Failed to process files"))).unwrap_or(Ok(()))
     }
 
-    fn process_entry(&mut self, path: &std::path::Path) -> Result<()> {
-        let ctime = std::fs::metadata(path)
-            .and_then(|metadata| metadata.created())
-            .with_context(|| format!("Failed to get ctime for file {}", path.display()))?;
-        if ctime > SystemTime::now() - CTIME_THRESHOLD {
-            return Ok(());
-        }
-
-        self.process_file(path)?;
-
-        Ok(())
-    }
-
-    fn process_file(&mut self, path: &std::path::Path) -> Result<()> {
+    fn process_file(&mut self, path: &std::path::Path, batch_map: &mut HashMap<String, Vec<bson::Document>>) -> Result<()> {
         let file_name = &path.display();
 
         println!("{}: open", file_name);
         let file = std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
         let lines = std::io::BufReader::new(file).lines();
-        self.process_lines(lines, file_name)?;
-
-        std::fs::remove_file(&path).with_context(|| format!("Failed to remove file {}", path.display()))?;
-
+        self.process_lines(lines, file_name, batch_map)?;
         println!("{}: done", file_name);
         Ok(())
     }
 
-    fn process_lines<Lines, Line, Error>(&mut self, lines: Lines, file_name: &impl std::fmt::Display) -> Result<()>
+    fn process_lines<Lines, Line, Error>(
+        &mut self,
+        lines: Lines,
+        file_name: &impl std::fmt::Display,
+        batch_map: &mut HashMap<String, Vec<bson::Document>>,
+    ) -> Result<()>
     where
         Lines: IntoIterator<Item = Result<Line, Error>>,
         Line: AsRef<str>,
         Error: std::error::Error + Send + Sync + 'static,
     {
-        let mut batch_map = HashMap::<String, Vec<bson::Document>>::new();
         let mut line_num: u64 = 0;
         let mut failure = None;
         for line in lines {
@@ -113,24 +110,12 @@ impl<'a> Processor<'a> {
                 bail!(errors::TerminatedError::new(format!("processing {}", location)));
             }
 
-            if let Err(f) = self.process_line(&location, line, &mut batch_map) {
+            if let Err(f) = self.process_line(&location, line, batch_map) {
                 logging::print(&f);
                 if failure.is_none() {
                     failure = Some(f);
                 }
             }
-        }
-
-        for (collection_name, batch) in batch_map {
-            if self.term_token.load(Ordering::Relaxed) {
-                bail!(errors::TerminatedError::new(format!("flushing for {}", file_name)));
-            }
-
-            let count = batch.len();
-            println!("{}: flushing {} to {}", file_name, count, collection_name);
-            self.store
-                .write(&collection_name, batch)
-                .with_context(|| format!("Failed to flush {} to {} for {}", count, collection_name, file_name))?;
         }
 
         failure
