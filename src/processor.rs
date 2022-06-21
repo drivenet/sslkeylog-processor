@@ -12,6 +12,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use mongodb::bson;
 use regex::Regex;
+use time::{format_description::FormatItem, macros::format_description};
 
 use crate::{
     data_model::{EnrichedRecord, Record},
@@ -152,12 +153,13 @@ impl<'a> Processor<'a> {
             None => bson::Document::from(&record),
         };
 
+        const SUFFIX_FORMAT: &[FormatItem] = format_description!("[year][month]");
         let collection_name = format!(
             "{}@{}:{}_{}",
             record.sni,
             record.server_ip,
             record.server_port,
-            record.timestamp.format("%Y%m")
+            record.timestamp.format(SUFFIX_FORMAT).unwrap()
         );
         self.write_document(&collection_name, document, location, batch_map)?;
 

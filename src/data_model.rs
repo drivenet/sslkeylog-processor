@@ -1,15 +1,15 @@
 use std::{convert::TryFrom, net::IpAddr, str::FromStr};
 
 use anyhow::{bail, ensure, Context, Result};
-use chrono::{DateTime, Utc};
 use mongodb::bson::{self, doc};
 use regex::Regex;
+use time::{format_description, OffsetDateTime};
 use url::{self, Host, Url};
 
 use crate::{logging, to_bson::ToBson};
 
 pub(crate) struct Record {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: OffsetDateTime,
     pub client_ip: IpAddr,
     pub client_port: u16,
     pub server_ip: IpAddr,
@@ -74,9 +74,8 @@ impl TryFrom<&str> for Record {
             .captures(value)
             .with_context(|| format!("Invalid line {}", value))?;
         let timestamp = &captures[1];
-        let timestamp = DateTime::parse_from_rfc3339(timestamp)
-            .with_context(|| format!("Invalid timestamp {}", timestamp))?
-            .with_timezone(&Utc);
+        let timestamp = OffsetDateTime::parse(timestamp, &format_description::well_known::Rfc3339)
+            .with_context(|| format!("Invalid timestamp {}", timestamp))?;
         let client_ip = &captures[2];
         let client_ip = IpAddr::from_str(client_ip).with_context(|| format!("Invalid client IP address {}", client_ip))?;
         let client_port = &captures[3];
