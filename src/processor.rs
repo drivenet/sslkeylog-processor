@@ -175,9 +175,10 @@ impl<'a> Processor<'a> {
     ) -> Result<()> {
         let batch = batch_map.entry(collection_name.to_string()).or_insert_with(Vec::new);
         batch.push(document);
-        const BATCH_SIZE: usize = 1000;
-        if batch.len() >= BATCH_SIZE {
-            println!("{}: writing to {}", location.file_name, collection_name);
+        let len = batch.len();
+        const BATCH_SIZE: usize = 618;
+        if len >= BATCH_SIZE {
+            println!("{}: writing {} to {}", location.file_name, len, collection_name);
             let batch = batch_map.remove(collection_name).unwrap();
             self.store
                 .write(collection_name, batch)
