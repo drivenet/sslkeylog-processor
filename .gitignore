@@ -1,2 +1,8 @@
-/target
-/data
+# Shared
+.idea/
+
+# Rust
+target/
+
+# Local
+/data/
