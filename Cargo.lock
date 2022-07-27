@@ -1302,7 +1302,7 @@ checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "sslkeylog-processor"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "anyhow",
  "bson",
