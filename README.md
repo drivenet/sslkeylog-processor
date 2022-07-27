@@ -12,7 +12,7 @@ On Windows, file names support [wildcard expansion](https://docs.rs/glob/), on o
 The tool optionally supports [MaxMind geolocation database](https://www.maxmind.com/en/geoip2-databases) to store [GeoNames](https://www.geonames.org/) identifier.
 
 ## Schema
-All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<year><month>` with the following schema:
+All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<year><month><day>` with the following schema:
 ```javascript
 {
   _id: <server_random>:BinData,

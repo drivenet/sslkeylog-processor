@@ -153,7 +153,7 @@ impl<'a> Processor<'a> {
             None => bson::Document::from(&record),
         };
 
-        const SUFFIX_FORMAT: &[FormatItem] = format_description!("[year][month]");
+        const SUFFIX_FORMAT: &[FormatItem] = format_description!("[year][month][day]");
         let collection_name = format!(
             "{}@{}:{}_{}",
             record.sni,
