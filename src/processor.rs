@@ -23,7 +23,7 @@ use crate::{
 };
 
 pub(crate) struct Processor<'a> {
-    sni_filter: Option<&'a Regex>,
+    filter: Option<&'a Regex>,
     term_token: &'a Arc<AtomicBool>,
     store: &'a mut Store<'a>,
     geolocator: Option<&'a Geolocator>,
@@ -31,13 +31,13 @@ pub(crate) struct Processor<'a> {
 
 impl<'a> Processor<'a> {
     pub fn new(
-        sni_filter: Option<&'a Regex>,
+        filter: Option<&'a Regex>,
         term_token: &'a Arc<AtomicBool>,
         store: &'a mut Store<'a>,
         geolocator: Option<&'a Geolocator>,
     ) -> Self {
         Self {
-            sni_filter,
+            filter,
             term_token,
             store,
             geolocator,
@@ -132,7 +132,11 @@ impl<'a> Processor<'a> {
     ) -> Result<()> {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
         let record = Record::try_from(line.as_ref()).with_context(|| format!("Failed to parse at {}", location))?;
-        if self.sni_filter.map(|f| !f.is_match(&record.sni)).unwrap_or(false) {
+        if self
+            .filter
+            .map(|f| !f.is_match(&format!("{}:{}", record.sni, record.server_port)))
+            .unwrap_or(false)
+        {
             return Ok(());
         }
 

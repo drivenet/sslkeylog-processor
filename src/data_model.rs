@@ -67,7 +67,7 @@ impl TryFrom<&str> for Record {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,})$";
         lazy_static! {
-            static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse filter regex");
+            static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse record filter regex");
         }
 
         let captures = FILTER_REGEX

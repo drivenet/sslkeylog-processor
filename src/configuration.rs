@@ -10,7 +10,7 @@ pub(crate) struct Configuration {
     pub files: Vec<String>,
     pub options: mongodb::options::ClientOptions,
     pub db_name: String,
-    pub sni_filter: Option<Regex>,
+    pub filter: Option<Regex>,
     pub geodb_path: Option<String>,
 }
 
@@ -32,7 +32,7 @@ where
         "f",
         "filter",
         "set filter regex, strict (/^...$/)",
-        "www\\.domain\\.(com|net)",
+        "www\\.domain\\.(com|net):443",
     );
     opts.optopt(
         "g",
@@ -70,11 +70,11 @@ where
         anyhow!("Missing connection string")
     })?;
 
-    let sni_filter = matches
+    let filter = matches
         .opt_str("f")
         .map(|f| Regex::new(&format!("^{}$", f)))
         .transpose()
-        .context("Invalid SNI filter")?;
+        .context("Invalid filter")?;
 
     let geodb_path = matches.opt_str("g");
 
@@ -110,7 +110,7 @@ where
         files,
         options,
         db_name,
-        sni_filter,
+        filter,
         geodb_path,
     }))
 }
