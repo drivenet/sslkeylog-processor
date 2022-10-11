@@ -1,15 +1,4 @@
 {
-    "editor.formatOnSave": true,
-    "rust-analyzer.checkOnSave.command": "clippy",
-    "cSpell.words": [
-        "bson",
-        "chrono",
-        "geodb",
-        "geolocation",
-        "geolocator",
-        "geoname",
-        "premaster",
-        "SIGTERM",
-        "sslkeylog"
-    ]
+  "editor.formatOnSave": true,
+  "rust-analyzer.checkOnSave.command": "clippy"
 }
