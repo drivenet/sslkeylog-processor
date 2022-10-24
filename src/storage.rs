@@ -25,13 +25,8 @@ impl<'a> Store<'a> {
     }
 
     pub fn write(&mut self, collection_name: &str, batch: impl IntoIterator<Item = bson::Document>) -> Result<()> {
+        let collection = self.get_collection(collection_name)?;
         let options = mongodb::options::InsertManyOptions::builder().ordered(false).build();
-
-        let collection = match self.collections.entry(String::from(collection_name)) {
-            Occupied(e) => e.into_mut(),
-            Vacant(e) => e.insert(create_collection(self.db, collection_name)?),
-        };
-
         const DUPLICATE_KEY_ERROR_CODE: i32 = 11000;
         match collection.insert_many(batch, options) {
             Ok(_) => Ok(()),
@@ -49,6 +44,17 @@ impl<'a> Store<'a> {
             }
             Err(e) => Err(anyhow!(e)),
         }
+    }
+
+    pub fn ensure_collection(&mut self, collection_name: &str) {
+        _ = self.get_collection(collection_name)
+    }
+
+    fn get_collection(&mut self, collection_name: &str) -> Result<&mut Collection<bson::Document>> {
+        Ok(match self.collections.entry(String::from(collection_name)) {
+            Occupied(e) => e.into_mut(),
+            Vacant(e) => e.insert(create_collection(self.db, collection_name)?),
+        })
     }
 }
 
