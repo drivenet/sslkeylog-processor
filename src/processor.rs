@@ -101,7 +101,7 @@ impl<'a> Processor<'a> {
         Line: AsRef<str>,
         Error: std::error::Error + Send + Sync + 'static,
     {
-        let mut line_num: u64 = 0;
+        let mut line_num = 0u64;
         let mut failure = None;
         for line in lines {
             line_num += 1;
