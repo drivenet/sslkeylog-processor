@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::TryFrom,
     io::BufRead,
     path::PathBuf,
@@ -12,7 +12,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use mongodb::bson;
 use regex::Regex;
-use time::{format_description::FormatItem, macros::format_description};
+use time::{format_description::FormatItem, macros::format_description, Duration};
 
 use crate::{
     data_model::{EnrichedRecord, Record},
@@ -51,12 +51,13 @@ impl<'a> Processor<'a> {
     {
         let mut failure = None;
         let mut batch_map = HashMap::<String, Vec<bson::Document>>::new();
+        let mut next_collection_names = HashSet::new();
         for path in paths {
             if self.term_token.load(Ordering::Relaxed) {
                 bail!(errors::TerminatedError::new("path iteration"));
             }
 
-            if let Err(f) = self.process_file(&PathBuf::from(path.as_ref()), &mut batch_map) {
+            if let Err(f) = self.process_file(&PathBuf::from(path.as_ref()), &mut batch_map, &mut next_collection_names) {
                 logging::print(&f);
                 if failure.is_none() {
                     failure = Some(f);
@@ -76,16 +77,30 @@ impl<'a> Processor<'a> {
                 .with_context(|| format!("Failed to flush {} to {}", count, collection_name))?;
         }
 
+        for collection_name in next_collection_names {
+            if self.term_token.load(Ordering::Relaxed) {
+                bail!(errors::TerminatedError::new("ensuring"));
+            }
+
+            println!("ensuring {}", collection_name);
+            self.store.ensure_collection(&collection_name);
+        }
+
         failure.map(|f| bail!(f.context("Failed to process files"))).unwrap_or(Ok(()))
     }
 
-    fn process_file(&mut self, path: &std::path::Path, batch_map: &mut HashMap<String, Vec<bson::Document>>) -> Result<()> {
+    fn process_file(
+        &mut self,
+        path: &std::path::Path,
+        batch_map: &mut HashMap<String, Vec<bson::Document>>,
+        next_collection_names: &mut HashSet<String>,
+    ) -> Result<()> {
         let file_name = &path.display();
 
         println!("{}: open", file_name);
         let file = std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
         let lines = std::io::BufReader::new(file).lines();
-        self.process_lines(lines, file_name, batch_map)?;
+        self.process_lines(lines, file_name, batch_map, next_collection_names)?;
         println!("{}: done", file_name);
         Ok(())
     }
@@ -95,6 +110,7 @@ impl<'a> Processor<'a> {
         lines: Lines,
         file_name: &impl std::fmt::Display,
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
+        next_collection_names: &mut HashSet<String>,
     ) -> Result<()>
     where
         Lines: IntoIterator<Item = Result<Line, Error>>,
@@ -111,10 +127,16 @@ impl<'a> Processor<'a> {
                 bail!(errors::TerminatedError::new(format!("processing {}", location)));
             }
 
-            if let Err(f) = self.process_line(&location, line, batch_map) {
-                logging::print(&f);
-                if failure.is_none() {
-                    failure = Some(f);
+            match self.process_line(&location, line, batch_map) {
+                Ok(Some(n)) => {
+                    next_collection_names.insert(n);
+                }
+                Ok(_) => {}
+                Err(f) => {
+                    logging::print(&f);
+                    if failure.is_none() {
+                        failure = Some(f);
+                    }
                 }
             }
         }
@@ -129,7 +151,7 @@ impl<'a> Processor<'a> {
         location: &FileLocation,
         line: Result<Line, Error>,
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
-    ) -> Result<()> {
+    ) -> Result<Option<String>> {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
         let record = Record::try_from(line.as_ref()).with_context(|| format!("Failed to parse at {}", location))?;
         if self
@@ -137,7 +159,7 @@ impl<'a> Processor<'a> {
             .map(|f| !f.is_match(&format!("{}:{}", record.sni, record.server_port)))
             .unwrap_or(false)
         {
-            return Ok(());
+            return Ok(None);
         }
 
         let geolocation = self
@@ -167,7 +189,14 @@ impl<'a> Processor<'a> {
         );
         self.write_document(&collection_name, document, location, batch_map)?;
 
-        Ok(())
+        let next_collection_name = format!(
+            "{}@{}:{}_{}",
+            record.sni,
+            record.server_ip,
+            record.server_port,
+            (record.timestamp + Duration::DAY).format(SUFFIX_FORMAT).unwrap()
+        );
+        Ok(Some(next_collection_name))
     }
 
     fn write_document(
