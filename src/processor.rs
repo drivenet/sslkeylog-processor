@@ -194,9 +194,13 @@ impl<'a> Processor<'a> {
             record.sni,
             record.server_ip,
             record.server_port,
-            (record.timestamp + Duration::DAY).format(SUFFIX_FORMAT).unwrap()
+            (record.timestamp + Duration::HOUR * 12).format(SUFFIX_FORMAT).unwrap()
         );
-        Ok(Some(next_collection_name))
+        Ok(if next_collection_name != collection_name {
+            Some(next_collection_name)
+        } else {
+            None
+        })
     }
 
     fn write_document(
