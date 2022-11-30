@@ -119,6 +119,7 @@ impl<'a> Processor<'a> {
     {
         let mut line_num = 0u64;
         let mut failure = None;
+        #[allow(clippy::explicit_counter_loop)]
         for line in lines {
             line_num += 1;
             let location = FileLocation { file_name, line_num };
