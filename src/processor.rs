@@ -15,7 +15,7 @@ use regex::Regex;
 use time::{format_description::FormatItem, macros::format_description, Duration};
 
 use crate::{
-    data_model::{EnrichedRecord, Record},
+    data_model::{BsonSerializable, GeoMetadata, Tls13Record, TlsPre13Record, TlsRecord},
     errors,
     geolocator::Geolocator,
     logging,
@@ -154,10 +154,14 @@ impl<'a> Processor<'a> {
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
     ) -> Result<Option<String>> {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
-        let record = Record::try_from(line.as_ref()).with_context(|| format!("Failed to parse at {}", location))?;
+        let record = TlsPre13Record::try_from(line.as_ref())
+            .map(|r| Box::from(r) as Box<dyn TlsRecord>)
+            .or_else(|_| Tls13Record::try_from(line.as_ref()).map(|r| Box::from(r) as Box<dyn TlsRecord>))
+            .with_context(|| format!("Failed to parse at {}", location))?;
+        let metadata = record.get_metadata();
         if self
             .filter
-            .map(|f| !f.is_match(&format!("{}:{}", record.sni, record.server_port)))
+            .map(|f| !f.is_match(&format!("{}:{}", metadata.sni, metadata.server_port)))
             .unwrap_or(false)
         {
             return Ok(None);
@@ -166,36 +170,34 @@ impl<'a> Processor<'a> {
         let geolocation = self
             .geolocator
             .map(|g| {
-                g.locate(record.client_ip)
-                    .with_context(|| format!("Failed to locate client {} at {}", record.client_ip, location))
+                g.locate(metadata.client_ip)
+                    .with_context(|| format!("Failed to locate client {} at {}", metadata.client_ip, location))
             })
             .transpose()?
             .flatten();
 
-        let document = match geolocation {
-            Some(geoname_id) => bson::Document::from(&EnrichedRecord {
-                record: &record,
-                geoname_id,
-            }),
-            None => bson::Document::from(&record),
+        let mut document = bson::Document::new();
+        record.serialize(&mut document);
+        if let Some(geoname_id) = geolocation {
+            GeoMetadata { geoname_id }.serialize(&mut document);
         };
 
         const SUFFIX_FORMAT: &[FormatItem] = format_description!("[year][month][day]");
         let collection_name = format!(
             "{}@{}:{}_{}",
-            record.sni,
-            record.server_ip,
-            record.server_port,
-            record.timestamp.format(SUFFIX_FORMAT).unwrap()
+            metadata.sni,
+            metadata.server_ip,
+            metadata.server_port,
+            metadata.timestamp.format(SUFFIX_FORMAT).unwrap()
         );
         self.write_document(&collection_name, document, location, batch_map)?;
 
         let next_collection_name = format!(
             "{}@{}:{}_{}",
-            record.sni,
-            record.server_ip,
-            record.server_port,
-            (record.timestamp + Duration::HOUR * 12).format(SUFFIX_FORMAT).unwrap()
+            metadata.sni,
+            metadata.server_ip,
+            metadata.server_port,
+            (metadata.timestamp + Duration::HOUR * 12).format(SUFFIX_FORMAT).unwrap()
         );
         Ok(if next_collection_name != collection_name {
             Some(next_collection_name)
