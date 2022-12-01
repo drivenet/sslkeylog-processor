@@ -12,10 +12,11 @@ On Windows, file names support [wildcard expansion](https://docs.rs/glob/), on o
 The tool optionally supports [MaxMind geolocation database](https://www.maxmind.com/en/geoip2-databases) to store [GeoNames](https://www.geonames.org/) identifier.
 
 ## Schema
-All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<year><month><day>` with the following schema:
+All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<year><month><day>` with the following schemas:
 ```javascript
+// TLS pre-1.3
 {
-  _id: <server_random>:BinData,
+  "_id": <server_random>:BinData,
   "t": <timestamp>:DateTime,
   "r": <client_random>:BinData,
   "i": <client_ip>:int/BinData,
@@ -24,7 +25,23 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<y
   "k": <premaster>:BinData,
   ["g": <geoname_id>:int],
 }
+
+// TLS 1.3:
+{
+  "_id": <server_random>:BinData,
+  "t": <timestamp>:DateTime,
+  "r": <client_random>:BinData,
+  "i": <client_ip>:int/BinData,
+  "p": <client_port>:int,
+  "c": <cipher_id>:int,
+  "h": <server_handshake>:BinData,
+  "f": <client_handshake>:BinData,
+  "z": <server_0>:BinData,
+  "s": <client_0>:BinData,
+  ["g": <geoname_id>:int],
+}
 ```
+
 Each collection has the following indexes:
 1. `random` on the `r` field
 2. `timestamp` on the `t` field
