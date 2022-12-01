@@ -144,12 +144,12 @@ impl TryFrom<&str> for Tls13Record {
         let server_handshake = &captures[10];
         let server_handshake =
             hex::decode(server_handshake).with_context(|| format!("Invalid server handshake secret {}", server_handshake))?;
-        let client_handshake = &captures[10];
+        let client_handshake = &captures[11];
         let client_handshake =
             hex::decode(client_handshake).with_context(|| format!("Invalid client handshake secret {}", client_handshake))?;
-        let server_0 = &captures[10];
+        let server_0 = &captures[12];
         let server_0 = hex::decode(server_0).with_context(|| format!("Invalid server initial secret {}", server_0))?;
-        let client_0 = &captures[10];
+        let client_0 = &captures[13];
         let client_0 = hex::decode(client_0).with_context(|| format!("Invalid client initial secret {}", client_0))?;
 
         Ok(Self {
