@@ -43,5 +43,5 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<y
 ```
 
 Each collection has the following indexes:
-1. `random` on the `r` field
-2. `timestamp` on the `t` field
+1. `random` on the `r` field (ascending)
+2. `timestamp` on the `t` field (ascending)
