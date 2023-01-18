@@ -1,6 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     convert::TryFrom,
+    hash::{Hash, Hasher},
     io::BufRead,
     path::PathBuf,
     sync::{
@@ -192,12 +193,16 @@ impl<'a> Processor<'a> {
         );
         self.write_document(&collection_name, document, location, batch_map)?;
 
+        let mut hash = DefaultHasher::new();
+        collection_name.hash(&mut hash);
+        let offset = (hash.finish() % 75431) as u32;
+        let next_timestamp = metadata.timestamp + Duration::HOUR + Duration::SECOND * offset;
         let next_collection_name = format!(
             "{}@{}:{}_{}",
             metadata.sni,
             metadata.server_ip,
             metadata.server_port,
-            (metadata.timestamp + Duration::HOUR * 12).format(SUFFIX_FORMAT).unwrap()
+            next_timestamp.format(SUFFIX_FORMAT).unwrap()
         );
         Ok(if next_collection_name != collection_name {
             Some(next_collection_name)
