@@ -98,11 +98,11 @@ impl<'a> Processor<'a> {
     ) -> Result<()> {
         let file_name = &path.display();
 
-        println!("{}: open", file_name);
+        // println!("{}: open", file_name);
         let file = std::fs::File::open(path).with_context(|| format!("Failed to open file {}", file_name))?;
         let lines = std::io::BufReader::new(file).lines();
         self.process_lines(lines, file_name, batch_map, next_collection_names)?;
-        println!("{}: done", file_name);
+        // println!("{}: done", file_name);
         Ok(())
     }
 
