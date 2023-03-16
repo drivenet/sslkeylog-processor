@@ -3,6 +3,8 @@ use std::ffi::OsStr;
 use anyhow::{anyhow, bail, Context, Result};
 use regex::Regex;
 
+use crate::data_model::InputFormat;
+
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
@@ -12,6 +14,7 @@ pub(crate) struct Configuration {
     pub db_name: String,
     pub filter: Option<Regex>,
     pub geodb_path: Option<String>,
+    pub input_format: InputFormat,
 }
 
 pub(crate) fn parse_args<Args>(args: Args) -> Result<Option<Configuration>>
@@ -39,6 +42,12 @@ where
         "geo-db",
         "set geolocation database path, strict (/^...$/)",
         "/path/to/GeoLite2-City.mmdb",
+    );
+    opts.optopt(
+        "i",
+        "input-format",
+        "set input format (default: sslkeylog)",
+        "sslkeylog|ddgsyslog",
     );
 
     let mut args = args.into_iter();
@@ -78,6 +87,12 @@ where
 
     let geodb_path = matches.opt_str("g");
 
+    let input_format = matches
+        .opt_str("i")
+        .map(|f| InputFormat::try_from(f.as_str()))
+        .transpose()?
+        .unwrap_or(InputFormat::SslKeylog);
+
     let files = matches.free;
     if files.is_empty() {
         print_usage(&program, &opts);
@@ -112,6 +127,7 @@ where
         db_name,
         filter,
         geodb_path,
+        input_format,
     }))
 }
 

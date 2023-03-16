@@ -15,19 +15,14 @@ use mongodb::bson;
 use regex::Regex;
 use time::{format_description::FormatItem, macros::format_description, Duration};
 
-use crate::{
-    data_model::{BsonSerializable, GeoMetadata, Tls13Record, TlsPre13Record, TlsRecord},
-    errors,
-    geolocator::Geolocator,
-    logging,
-    storage::Store,
-};
+use crate::{data_model::*, errors, geolocator::Geolocator, logging, storage::Store};
 
 pub(crate) struct Processor<'a> {
     filter: Option<&'a Regex>,
     term_token: &'a Arc<AtomicBool>,
     store: &'a mut Store<'a>,
     geolocator: Option<&'a Geolocator>,
+    input_format: InputFormat,
 }
 
 impl<'a> Processor<'a> {
@@ -36,12 +31,14 @@ impl<'a> Processor<'a> {
         term_token: &'a Arc<AtomicBool>,
         store: &'a mut Store<'a>,
         geolocator: Option<&'a Geolocator>,
+        input_format: InputFormat,
     ) -> Self {
         Self {
             filter,
             term_token,
             store,
             geolocator,
+            input_format,
         }
     }
 
@@ -155,9 +152,13 @@ impl<'a> Processor<'a> {
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
     ) -> Result<Option<String>> {
         let line = line.with_context(|| format!("Failed to read line at {}", location))?;
-        let record = TlsPre13Record::try_from(line.as_ref())
+        let line = match self.input_format {
+            InputFormat::SslKeylog => InputLine::SslKeylog(line.as_ref()),
+            InputFormat::DdgSyslog => InputLine::DdgSyslog(line.as_ref()),
+        };
+        let record = TlsPre13Record::try_from(&line)
             .map(|r| Box::from(r) as Box<dyn TlsRecord>)
-            .or_else(|_| Tls13Record::try_from(line.as_ref()).map(|r| Box::from(r) as Box<dyn TlsRecord>))
+            .or_else(|_| Tls13Record::try_from(&line).map(|r| Box::from(r) as Box<dyn TlsRecord>))
             .with_context(|| format!("Failed to parse at {}", location))?;
         let metadata = record.get_metadata();
         if self

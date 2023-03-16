@@ -14,6 +14,12 @@ pub(crate) fn process(args: &configuration::Configuration, term_token: &Arc<Atom
             geolocator::Geolocator::new(path).with_context(|| format!("Failed to create geolocator with database path {:?}", path))
         })
         .transpose()?;
-    let mut context = processor::Processor::new(args.filter.as_ref(), term_token, &mut store, geolocator.as_ref());
+    let mut context = processor::Processor::new(
+        args.filter.as_ref(),
+        term_token,
+        &mut store,
+        geolocator.as_ref(),
+        args.input_format,
+    );
     context.process(&args.files)
 }

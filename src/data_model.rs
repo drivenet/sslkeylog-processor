@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, net::IpAddr, str::FromStr};
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use mongodb::bson::{self, doc};
 use regex::Regex;
 use time::{format_description, OffsetDateTime};
@@ -10,6 +10,17 @@ use crate::{logging, to_bson::ToBson};
 
 pub(crate) trait BsonSerializable {
     fn serialize(&self, document: &mut bson::Document);
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum InputFormat {
+    SslKeylog,
+    DdgSyslog,
+}
+
+pub(crate) enum InputLine<'a> {
+    SslKeylog(&'a str),
+    DdgSyslog(&'a str),
 }
 
 pub(crate) trait TlsRecord: BsonSerializable {
@@ -57,35 +68,46 @@ impl TlsRecord for TlsPre13Record {
     }
 }
 
-impl TryFrom<&str> for TlsPre13Record {
+impl TryFrom<&InputLine<'_>> for TlsPre13Record {
     type Error = anyhow::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,})$";
-        lazy_static! {
-            static ref FILTER_REGEX: Regex =
-                Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS pre-1.3 record filter regex");
+    fn try_from(value: &InputLine<'_>) -> Result<Self, Self::Error> {
+        match value {
+            InputLine::SslKeylog(s) => tls_pre13_from_sslkeylog(s),
+            InputLine::DdgSyslog(s) => tls_pre13_from_ddg_syslog(s),
         }
-
-        let captures = FILTER_REGEX
-            .captures(value)
-            .with_context(|| format!("Invalid line {}", value))?;
-        let metadata = RecordMetadata::try_from(&RecordMetadataSource {
-            timestamp: &captures[1],
-            client_ip: &captures[2],
-            client_port: &captures[3],
-            server_ip: &captures[4],
-            server_port: &captures[5],
-            sni: &captures[6],
-            cipher_id: &captures[7],
-            server_random: &captures[8],
-            client_random: &captures[9],
-        })?;
-        let premaster = &captures[10];
-        let premaster = hex::decode(premaster).with_context(|| format!("Invalid premaster secret {}", premaster))?;
-
-        Ok(Self { metadata, premaster })
     }
+}
+
+fn tls_pre13_from_sslkeylog(value: &str) -> Result<TlsPre13Record, anyhow::Error> {
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,})$";
+    lazy_static! {
+        static ref FILTER_REGEX: Regex =
+            Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS pre-1.3 record sslkeylog filter regex");
+    }
+
+    let captures = FILTER_REGEX
+        .captures(value)
+        .with_context(|| format!("Invalid line {}", value))?;
+    let metadata = RecordMetadata::try_from(&RecordMetadataSource {
+        timestamp: &captures[1],
+        client_ip: &captures[2],
+        client_port: &captures[3],
+        server_ip: &captures[4],
+        server_port: &captures[5],
+        sni: &captures[6],
+        cipher_id: &captures[7],
+        server_random: &captures[8],
+        client_random: &captures[9],
+    })?;
+    let premaster = &captures[10];
+    let premaster = hex::decode(premaster).with_context(|| format!("Invalid premaster secret {}", premaster))?;
+
+    Ok(TlsPre13Record { metadata, premaster })
+}
+
+fn tls_pre13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Error> {
+    todo!()
 }
 
 pub(crate) struct Tls13Record {
@@ -118,48 +140,59 @@ impl<'a> From<&'a Tls13Record> for &'a RecordMetadata {
     }
 }
 
-impl TryFrom<&str> for Tls13Record {
+impl TryFrom<&InputLine<'_>> for Tls13Record {
     type Error = anyhow::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,})$";
-        lazy_static! {
-            static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS 1.3 record filter regex");
+    fn try_from(value: &InputLine<'_>) -> Result<Self, Self::Error> {
+        match value {
+            InputLine::SslKeylog(s) => tls13_from_sslkeylog(s),
+            InputLine::DdgSyslog(s) => tls13_from_ddg_syslog(s),
         }
-
-        let captures = FILTER_REGEX
-            .captures(value)
-            .with_context(|| format!("Invalid line {}", value))?;
-        let metadata = RecordMetadata::try_from(&RecordMetadataSource {
-            timestamp: &captures[1],
-            client_ip: &captures[2],
-            client_port: &captures[3],
-            server_ip: &captures[4],
-            server_port: &captures[5],
-            sni: &captures[6],
-            cipher_id: &captures[7],
-            server_random: &captures[8],
-            client_random: &captures[9],
-        })?;
-        let server_handshake = &captures[10];
-        let server_handshake =
-            hex::decode(server_handshake).with_context(|| format!("Invalid server handshake secret {}", server_handshake))?;
-        let client_handshake = &captures[11];
-        let client_handshake =
-            hex::decode(client_handshake).with_context(|| format!("Invalid client handshake secret {}", client_handshake))?;
-        let server_0 = &captures[12];
-        let server_0 = hex::decode(server_0).with_context(|| format!("Invalid server initial secret {}", server_0))?;
-        let client_0 = &captures[13];
-        let client_0 = hex::decode(client_0).with_context(|| format!("Invalid client initial secret {}", client_0))?;
-
-        Ok(Self {
-            metadata,
-            server_handshake,
-            client_handshake,
-            server_0,
-            client_0,
-        })
     }
+}
+
+fn tls13_from_sslkeylog(value: &str) -> Result<Tls13Record, anyhow::Error> {
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,})$";
+    lazy_static! {
+        static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS 1.3 record filter regex");
+    }
+
+    let captures = FILTER_REGEX
+        .captures(value)
+        .with_context(|| format!("Invalid line {}", value))?;
+    let metadata = RecordMetadata::try_from(&RecordMetadataSource {
+        timestamp: &captures[1],
+        client_ip: &captures[2],
+        client_port: &captures[3],
+        server_ip: &captures[4],
+        server_port: &captures[5],
+        sni: &captures[6],
+        cipher_id: &captures[7],
+        server_random: &captures[8],
+        client_random: &captures[9],
+    })?;
+    let server_handshake = &captures[10];
+    let server_handshake =
+        hex::decode(server_handshake).with_context(|| format!("Invalid server handshake secret {}", server_handshake))?;
+    let client_handshake = &captures[11];
+    let client_handshake =
+        hex::decode(client_handshake).with_context(|| format!("Invalid client handshake secret {}", client_handshake))?;
+    let server_0 = &captures[12];
+    let server_0 = hex::decode(server_0).with_context(|| format!("Invalid server initial secret {}", server_0))?;
+    let client_0 = &captures[13];
+    let client_0 = hex::decode(client_0).with_context(|| format!("Invalid client initial secret {}", client_0))?;
+
+    Ok(Tls13Record {
+        metadata,
+        server_handshake,
+        client_handshake,
+        server_0,
+        client_0,
+    })
+}
+
+fn tls13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Error> {
+    todo!()
 }
 
 pub(crate) struct GeoMetadata {
@@ -277,6 +310,18 @@ fn parse_sni(sni: &str, server_ip: IpAddr, server_port: u16) -> Result<String> {
         None => bail!("Missing host"),
     }
     .to_string())
+}
+
+impl TryFrom<&str> for InputFormat {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+        match s.to_ascii_lowercase().as_str() {
+            "sslkeylog" => Ok(Self::SslKeylog),
+            "ddgsyslog" => Ok(Self::DdgSyslog),
+            _ => Err(anyhow!("Invalid input format")),
+        }
+    }
 }
 
 #[cfg(test)]
