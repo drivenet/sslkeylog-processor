@@ -88,7 +88,7 @@ fn tls_pre13_from_sslkeylog(value: &str) -> Result<TlsPre13Record, anyhow::Error
 
     let captures = FILTER_REGEX
         .captures(value)
-        .with_context(|| format!("Invalid line {}", value))?;
+        .with_context(|| format!("Invalid TLS pre-1.3 sslkeylog line {}", value))?;
     let metadata = RecordMetadata::try_from(&RecordMetadataSource {
         timestamp: &captures[1],
         client_ip: &captures[2],
@@ -100,14 +100,35 @@ fn tls_pre13_from_sslkeylog(value: &str) -> Result<TlsPre13Record, anyhow::Error
         server_random: &captures[8],
         client_random: &captures[9],
     })?;
-    let premaster = &captures[10];
-    let premaster = hex::decode(premaster).with_context(|| format!("Invalid premaster secret {}", premaster))?;
+    let premaster = tls_secret_try_from(&captures[10], "premaster")?;
 
     Ok(TlsPre13Record { metadata, premaster })
 }
 
 fn tls_pre13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Error> {
-    todo!()
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?) (\S*) (\S+?) (\S+?) (\d{1,5}) (\d{1,5}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) - - - - ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{16,})$";
+    lazy_static! {
+        static ref FILTER_REGEX: Regex =
+            Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS pre-1.3 record DDG syslog filter regex");
+    }
+
+    let captures = FILTER_REGEX
+        .captures(value)
+        .with_context(|| format!("Invalid TLS pre-13 DDG syslog line {}", value))?;
+    let metadata = RecordMetadata::try_from(&RecordMetadataSource {
+        timestamp: &captures[1],
+        sni: &captures[2],
+        client_ip: &captures[3],
+        server_ip: &captures[4],
+        client_port: &captures[5],
+        server_port: &captures[6],
+        client_random: &captures[7],
+        server_random: &captures[8],
+        cipher_id: &captures[13],
+    })?;
+    let premaster = tls_secret_try_from(&captures[10], "premaster")?;
+
+    Ok(TlsPre13Record { metadata, premaster })
 }
 
 pub(crate) struct Tls13Record {
@@ -154,12 +175,13 @@ impl TryFrom<&InputLine<'_>> for Tls13Record {
 fn tls13_from_sslkeylog(value: &str) -> Result<Tls13Record, anyhow::Error> {
     const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\S+?):(\d{1,5}) (\S+?):(\d{1,5}) (\S*) ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,})$";
     lazy_static! {
-        static ref FILTER_REGEX: Regex = Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS 1.3 record filter regex");
+        static ref FILTER_REGEX: Regex =
+            Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS 1.3 sslkeylog record filter regex");
     }
 
     let captures = FILTER_REGEX
         .captures(value)
-        .with_context(|| format!("Invalid line {}", value))?;
+        .with_context(|| format!("Invalid TLS 1.3 sslkeylog line {}", value))?;
     let metadata = RecordMetadata::try_from(&RecordMetadataSource {
         timestamp: &captures[1],
         client_ip: &captures[2],
@@ -171,16 +193,10 @@ fn tls13_from_sslkeylog(value: &str) -> Result<Tls13Record, anyhow::Error> {
         server_random: &captures[8],
         client_random: &captures[9],
     })?;
-    let server_handshake = &captures[10];
-    let server_handshake =
-        hex::decode(server_handshake).with_context(|| format!("Invalid server handshake secret {}", server_handshake))?;
-    let client_handshake = &captures[11];
-    let client_handshake =
-        hex::decode(client_handshake).with_context(|| format!("Invalid client handshake secret {}", client_handshake))?;
-    let server_0 = &captures[12];
-    let server_0 = hex::decode(server_0).with_context(|| format!("Invalid server initial secret {}", server_0))?;
-    let client_0 = &captures[13];
-    let client_0 = hex::decode(client_0).with_context(|| format!("Invalid client initial secret {}", client_0))?;
+    let server_handshake = tls_secret_try_from(&captures[10], "server handshake")?;
+    let client_handshake = tls_secret_try_from(&captures[11], "client handshake")?;
+    let server_0 = tls_secret_try_from(&captures[12], "server initial")?;
+    let client_0 = tls_secret_try_from(&captures[13], "client initial")?;
 
     Ok(Tls13Record {
         metadata,
@@ -191,8 +207,39 @@ fn tls13_from_sslkeylog(value: &str) -> Result<Tls13Record, anyhow::Error> {
     })
 }
 
-fn tls13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Error> {
-    todo!()
+fn tls13_from_ddg_syslog(value: &str) -> Result<Tls13Record, anyhow::Error> {
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?) (\S*) (\S+?) (\S+?) (\d{1,5}) (\d{1,5}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{16,}) ([0-9a-fA-F]{1,4}) -$";
+    lazy_static! {
+        static ref FILTER_REGEX: Regex =
+            Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS 1.3 DDG syslog record filter regex");
+    }
+
+    let captures = FILTER_REGEX
+        .captures(value)
+        .with_context(|| format!("Invalid TLS 1.3 DDG syslog line {}", value))?;
+    let metadata = RecordMetadata::try_from(&RecordMetadataSource {
+        timestamp: &captures[1],
+        sni: &captures[2],
+        client_ip: &captures[3],
+        server_ip: &captures[4],
+        client_port: &captures[5],
+        server_port: &captures[6],
+        client_random: &captures[7],
+        server_random: &captures[8],
+        cipher_id: &captures[13],
+    })?;
+    let client_handshake = tls_secret_try_from(&captures[9], "client handshake")?;
+    let server_handshake = tls_secret_try_from(&captures[10], "server handshake")?;
+    let client_0 = tls_secret_try_from(&captures[11], "client initial")?;
+    let server_0 = tls_secret_try_from(&captures[12], "server initial")?;
+
+    Ok(Tls13Record {
+        metadata,
+        server_handshake,
+        client_handshake,
+        server_0,
+        client_0,
+    })
 }
 
 pub(crate) struct GeoMetadata {
@@ -322,6 +369,10 @@ impl TryFrom<&str> for InputFormat {
             _ => Err(anyhow!("Invalid input format")),
         }
     }
+}
+
+fn tls_secret_try_from(value: &str, kind: &str) -> Result<Vec<u8>, anyhow::Error> {
+    hex::decode(value).with_context(|| format!("Invalid TLS {} secret {}", kind, value))
 }
 
 #[cfg(test)]
