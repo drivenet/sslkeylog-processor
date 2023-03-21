@@ -106,7 +106,7 @@ fn tls_pre13_from_sslkeylog(value: &str) -> Result<TlsPre13Record, anyhow::Error
 }
 
 fn tls_pre13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Error> {
-    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?) (\S*) (\S+?) (\S+?) (\d{1,5}) (\d{1,5}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) - - - - ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{16,})$";
+    const FILTER_REGEX_PATTERN: &str = r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?) (\S*) (\S+?) (\S+?) (\d{1,5}) (\d{1,5}) ([0-9a-fA-F]{64}) ([0-9a-fA-F]{64}) \- \- \- \- ([0-9a-fA-F]{1,4}) ([0-9a-fA-F]{16,})$";
     lazy_static! {
         static ref FILTER_REGEX: Regex =
             Regex::new(FILTER_REGEX_PATTERN).expect("Failed to parse TLS pre-1.3 record DDG syslog filter regex");
@@ -114,9 +114,13 @@ fn tls_pre13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Erro
 
     let captures = FILTER_REGEX
         .captures(value)
-        .with_context(|| format!("Invalid TLS pre-13 DDG syslog line {}", value))?;
+        .with_context(|| format!("Invalid TLS pre-1.3 DDG syslog line {}", value))?;
+    let mut timestamp = captures[1].to_string();
+    if !timestamp.ends_with('Z') {
+        timestamp += "Z";
+    }
     let metadata = RecordMetadata::try_from(&RecordMetadataSource {
-        timestamp: &captures[1],
+        timestamp: &timestamp,
         sni: &captures[2],
         client_ip: &captures[3],
         server_ip: &captures[4],
@@ -124,7 +128,7 @@ fn tls_pre13_from_ddg_syslog(value: &str) -> Result<TlsPre13Record, anyhow::Erro
         server_port: &captures[6],
         client_random: &captures[7],
         server_random: &captures[8],
-        cipher_id: &captures[13],
+        cipher_id: &captures[9],
     })?;
     let premaster = tls_secret_try_from(&captures[10], "premaster")?;
 
@@ -217,8 +221,12 @@ fn tls13_from_ddg_syslog(value: &str) -> Result<Tls13Record, anyhow::Error> {
     let captures = FILTER_REGEX
         .captures(value)
         .with_context(|| format!("Invalid TLS 1.3 DDG syslog line {}", value))?;
+    let mut timestamp = captures[1].to_string();
+    if !timestamp.ends_with('Z') {
+        timestamp += "Z";
+    }
     let metadata = RecordMetadata::try_from(&RecordMetadataSource {
-        timestamp: &captures[1],
+        timestamp: &timestamp,
         sni: &captures[2],
         client_ip: &captures[3],
         server_ip: &captures[4],
