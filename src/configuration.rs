@@ -42,7 +42,7 @@ where
         "i",
         "input-format",
         "set input format (default: sslkeylog)",
-        "sslkeylog|ddgsyslog",
+        "sslkeylog | ddgsyslog",
     );
 
     let mut args = args.into_iter();
