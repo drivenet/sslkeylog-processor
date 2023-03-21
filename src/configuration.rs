@@ -37,12 +37,7 @@ where
         "set filter regex, strict (/^...$/)",
         "www\\.domain\\.(com|net):443",
     );
-    opts.optopt(
-        "g",
-        "geo-db",
-        "set geolocation database path, strict (/^...$/)",
-        "/path/to/GeoLite2-City.mmdb",
-    );
+    opts.optopt("g", "geo-db", "set geolocation database path", "/path/to/GeoLite2-City.mmdb");
     opts.optopt(
         "i",
         "input-format",
