@@ -411,7 +411,7 @@ mod test {
     }
 
     #[test]
-    fn parse_sni_doesnt_fail_on_invalid_implicit_port() {
+    fn parse_sni_succeeds_on_invalid_implicit_port() {
         assert_eq!("just-a-host.com", parse_sni_test("just-a-host.com", "127.0.0.1", 80,));
     }
 }

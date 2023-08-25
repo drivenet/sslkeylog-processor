@@ -29,7 +29,7 @@ where
         "c",
         "connection",
         "set connection string, start with @ to load from file",
-        "mongodb://.../dbname?params... | @file",
+        "mongodb://.../database_name?params... | @file",
     );
     opts.optopt(
         "f",
