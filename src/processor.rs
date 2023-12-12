@@ -222,7 +222,7 @@ impl<'a> Processor<'a> {
         let batch = batch_map.entry(collection_name.to_string()).or_default();
         batch.push(document);
         let len = batch.len();
-        const BATCH_SIZE: usize = 1000;
+        const BATCH_SIZE: usize = 337;
         if len >= BATCH_SIZE {
             println!("{}: writing {} to {}", location.file_name, len, collection_name);
             let batch = batch_map.remove(collection_name).unwrap();
