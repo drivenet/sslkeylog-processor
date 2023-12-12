@@ -219,7 +219,7 @@ impl<'a> Processor<'a> {
         location: &FileLocation,
         batch_map: &mut HashMap<String, Vec<bson::Document>>,
     ) -> Result<()> {
-        let batch = batch_map.entry(collection_name.to_string()).or_insert_with(Vec::new);
+        let batch = batch_map.entry(collection_name.to_string()).or_default();
         batch.push(document);
         let len = batch.len();
         const BATCH_SIZE: usize = 1000;
