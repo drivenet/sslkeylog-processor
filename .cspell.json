@@ -12,11 +12,13 @@
     "geoname",
     "getopts",
     "Hasher",
+    "libc",
     "maxminddb",
     "optflag",
     "optopt",
     "premaster",
     "readfile",
+    "rustup",
     "SIGTERM",
     "sslkeylog",
     "Zagorodnikov"
