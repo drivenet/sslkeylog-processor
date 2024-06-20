@@ -6,6 +6,14 @@ This is a tool to process logs produced by the [sslkeylog](https://github.com/dr
 
 [UPX](https://github.com/upx/upx) is used to reduce binary size, if you prefer not using it, just skip it.
 
+You may want to build [MUSL](https://musl.libc.org/)-based static build if your build system's glibc is different from the target one. To prepare the environment do the following:
+```shell
+sudo apt install musl-tools
+rustup target add x86_64-unknown-linux-musl
+```
+Then just use:
+`cargo build --release --target x86_64-unknown-linux-musl && upx --best target/x86_64-unknown-linux-musl/release/sslkeylog-processor`
+
 ## Usage
 Run the built binary to determine the command-line options.
 On Windows, file names support [wildcard expansion](https://docs.rs/glob/), on other OSes shell expansion is expected to take care of that.
