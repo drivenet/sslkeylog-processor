@@ -6,7 +6,12 @@ This is a tool to process logs produced by the [sslkeylog](https://github.com/dr
 
 [UPX](https://github.com/upx/upx) is used to reduce binary size, if you prefer not using it, just skip it.
 
-You may want to build [MUSL](https://musl.libc.org/)-based static build if your build system's glibc is different from the target one. To prepare the environment do the following:
+If your build system's glibc is different from the target one, you may encounter the following error:
+```text
+sslkeylog-processor: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_...' not found (required by sslkeylog-processor)
+```
+
+To fix this you might want to build a [MUSL](https://musl.libc.org/)-based static binary. Prepare the environment with the following commands:
 ```shell
 sudo apt install musl-tools
 rustup target add x86_64-unknown-linux-musl
