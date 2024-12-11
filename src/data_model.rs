@@ -277,7 +277,7 @@ struct RecordMetadataSource<'a> {
     pub client_random: &'a str,
 }
 
-impl<'a> TryFrom<&RecordMetadataSource<'a>> for RecordMetadata {
+impl TryFrom<&RecordMetadataSource<'_>> for RecordMetadata {
     type Error = anyhow::Error;
 
     fn try_from(value: &RecordMetadataSource) -> Result<Self, anyhow::Error> {
