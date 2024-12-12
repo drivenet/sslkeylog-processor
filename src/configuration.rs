@@ -103,7 +103,9 @@ where
         connection_string
     };
 
-    let options = mongodb::options::ClientOptions::parse(&connection_string).context("Failed to parse connection string")?;
+    let options = mongodb::options::ClientOptions::parse(&connection_string)
+        .run()
+        .context("Failed to parse connection string")?;
 
     let db_name = connection_string
         .find("://")

@@ -26,18 +26,15 @@ impl<'a> Store<'a> {
 
     pub fn write(&mut self, collection_name: &str, batch: impl IntoIterator<Item = bson::Document>) -> Result<()> {
         let collection = self.get_collection(collection_name)?;
-        let options = mongodb::options::InsertManyOptions::builder().ordered(false).build();
         const DUPLICATE_KEY_ERROR_CODE: i32 = 11000;
-        match collection.insert_many(batch, options) {
+        match collection.insert_many(batch).ordered(false).run() {
             Ok(_) => Ok(()),
             Err(e)
                 if matches!(
                     e.kind.as_ref(),
                     mongodb::error::ErrorKind::BulkWrite(f)
-                    if f.write_concern_error.is_none()
-                        && f.write_errors.as_ref()
-                            .map(|b| b.iter().all(|e| e.code == DUPLICATE_KEY_ERROR_CODE))
-                            .unwrap_or(false)
+                    if f.write_concern_errors.is_empty()
+                        && f.write_errors.values().all(|b| b.code == DUPLICATE_KEY_ERROR_CODE)
                 ) =>
             {
                 Ok(())
@@ -64,6 +61,6 @@ fn create_collection(db: &Database, name: &str) -> Result<Collection<bson::Docum
         "createIndexes": collection.name(),
         "indexes": data_model::get_index_model(),
     };
-    db.run_command(command, None).context("Failed to create indexes")?;
+    db.run_command(command).run().context("Failed to create indexes")?;
     Ok(collection)
 }
