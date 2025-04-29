@@ -32,8 +32,6 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<y
   "t": <timestamp>:DateTime,
   "r": <client_random>:BinData,
   "i": <client_ip>:int/BinData,
-  "p": <client_port>:int,
-  "c": <cipher_id>:int,
   "k": <premaster>:BinData,
 }
 
@@ -43,8 +41,6 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<y
   "t": <timestamp>:DateTime,
   "r": <client_random>:BinData,
   "i": <client_ip>:int/BinData,
-  "p": <client_port>:int,
-  "c": <cipher_id>:int,
   "h": <server_handshake>:BinData,
   "f": <client_handshake>:BinData,
   "z": <server_0>:BinData,
