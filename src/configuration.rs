@@ -13,7 +13,6 @@ pub(crate) struct Configuration {
     pub options: mongodb::options::ClientOptions,
     pub db_name: String,
     pub filter: Option<Regex>,
-    pub geodb_path: Option<String>,
     pub input_format: InputFormat,
 }
 
@@ -37,7 +36,6 @@ where
         "set filter regex, strict (/^...$/)",
         "www\\.domain\\.(com|net):443",
     );
-    opts.optopt("g", "geo-db", "set geolocation database path", "/path/to/GeoLite2-City.mmdb");
     opts.optopt(
         "i",
         "input-format",
@@ -80,8 +78,6 @@ where
         .transpose()
         .context("Invalid filter")?;
 
-    let geodb_path = matches.opt_str("g");
-
     let input_format = matches
         .opt_str("i")
         .map(|f| InputFormat::try_from(f.as_str()))
@@ -123,7 +119,6 @@ where
         options,
         db_name,
         filter,
-        geodb_path,
         input_format,
     }))
 }

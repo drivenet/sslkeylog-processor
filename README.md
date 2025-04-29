@@ -22,7 +22,6 @@ Then just use:
 ## Usage
 Run the built binary to determine the command-line options.
 On Windows, file names support [wildcard expansion](https://docs.rs/glob/), on other OSes shell expansion is expected to take care of that.
-The tool optionally supports [MaxMind geolocation database](https://www.maxmind.com/en/geoip2-databases) to store [GeoNames](https://www.geonames.org/) identifier.
 
 ## Schema
 All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<year><month><day>` with the following schemas:
@@ -36,7 +35,6 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<y
   "p": <client_port>:int,
   "c": <cipher_id>:int,
   "k": <premaster>:BinData,
-  ["g": <geoname_id>:int],
 }
 
 // TLS 1.3:
@@ -51,7 +49,6 @@ All keys are placed in the collections named `<sni>@<server_ip>:<server_port>_<y
   "f": <client_handshake>:BinData,
   "z": <server_0>:BinData,
   "s": <client_0>:BinData,
-  ["g": <geoname_id>:int],
 }
 ```
 

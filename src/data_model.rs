@@ -242,16 +242,6 @@ fn tls13_from_ddg_syslog(value: &str) -> Result<Tls13Record, anyhow::Error> {
     })
 }
 
-pub(crate) struct GeoMetadata {
-    pub geoname_id: u32,
-}
-
-impl BsonSerializable for GeoMetadata {
-    fn serialize(&self, document: &mut bson::Document) {
-        document.insert("g", self.geoname_id);
-    }
-}
-
 pub(crate) fn get_index_model() -> Vec<bson::Document> {
     vec![
         doc! {

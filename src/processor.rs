@@ -15,13 +15,12 @@ use mongodb::bson;
 use regex::Regex;
 use time::{format_description::FormatItem, macros::format_description, Duration};
 
-use crate::{data_model::*, errors, geolocator::Geolocator, logging, storage::Store};
+use crate::{data_model::*, errors, logging, storage::Store};
 
 pub(crate) struct Processor<'a> {
     filter: Option<&'a Regex>,
     term_token: &'a Arc<AtomicBool>,
     store: &'a mut Store<'a>,
-    geolocator: Option<&'a Geolocator>,
     input_format: InputFormat,
 }
 
@@ -30,14 +29,12 @@ impl<'a> Processor<'a> {
         filter: Option<&'a Regex>,
         term_token: &'a Arc<AtomicBool>,
         store: &'a mut Store<'a>,
-        geolocator: Option<&'a Geolocator>,
         input_format: InputFormat,
     ) -> Self {
         Self {
             filter,
             term_token,
             store,
-            geolocator,
             input_format,
         }
     }
@@ -169,20 +166,8 @@ impl<'a> Processor<'a> {
             return Ok(None);
         }
 
-        let geolocation = self
-            .geolocator
-            .map(|g| {
-                g.locate(metadata.client_ip)
-                    .with_context(|| format!("Failed to locate client {} at {}", metadata.client_ip, location))
-            })
-            .transpose()?
-            .flatten();
-
         let mut document = bson::Document::new();
         record.serialize(&mut document);
-        if let Some(geoname_id) = geolocation {
-            GeoMetadata { geoname_id }.serialize(&mut document);
-        };
 
         const SUFFIX_FORMAT: &[FormatItem] = format_description!("[year][month][day]");
         let collection_name = format!(
