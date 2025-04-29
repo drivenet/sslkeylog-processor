@@ -1,20 +1,20 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.16.4"
+version = "0.16.5"
 authors = ["Aristarkh Zagorodnikov <xm@x-infinity.com>"]
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 regex = "1.11.1"
-time = "0.3.40"
+time = "0.3.41"
 bson = { version = "2.14.0", features = ["time-0_3"] }
-mongodb = { version = "3.2.2", features = ["sync"] }
+mongodb = { version = "3.2.3", features = ["sync"] }
 hex = "0.4.3"
 lazy_static = "1.5.0"
 getopts = "0.2.21"
 url = "2.5.4"
-maxminddb = "0.25.0"
+maxminddb = "0.26.0"
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3.17"

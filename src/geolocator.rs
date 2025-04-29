@@ -1,7 +1,7 @@
 use std::{net::IpAddr, path::Path};
 
 use anyhow::{bail, Result};
-use maxminddb::{geoip2, MaxMindDBError, Reader};
+use maxminddb::{geoip2, Reader};
 
 pub(crate) struct Geolocator {
     reader: Reader<Vec<u8>>,
@@ -16,12 +16,12 @@ impl Geolocator {
 
     pub fn locate(&self, address: IpAddr) -> Result<Option<u32>> {
         Ok(match self.reader.lookup::<geoip2::City>(address) {
-            Ok(result) => result
+            Ok(Some(result)) => result
                 .city
                 .as_ref()
                 .and_then(|c| c.geoname_id)
                 .or_else(|| result.country.and_then(|c| c.geoname_id)),
-            Err(MaxMindDBError::AddressNotFoundError(_)) => None,
+            Ok(None) => None,
             Err(e) => bail!(e),
         })
     }
