@@ -1,6 +1,6 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.18.1"
+version = "0.18.2"
 authors = ["Aristarkh Zagorodnikov <xm@x-infinity.com>"]
 edition = "2021"
 
@@ -8,15 +8,15 @@ edition = "2021"
 anyhow = "1.0.98"
 regex = "1.11.1"
 time = "0.3.41"
-bson = { version = "2.14.0", features = ["time-0_3"] }
+bson = { version = "2.15.0", features = ["time-0_3"] }
 mongodb = { version = "3.2.3", features = ["sync"] }
 hex = "0.4.3"
 lazy_static = "1.5.0"
-getopts = "0.2.21"
+getopts = "0.2.23"
 url = "2.5.4"
 
 [target.'cfg(unix)'.dependencies]
-signal-hook = "0.3.17"
+signal-hook = "0.3.18"
 
 [profile.release]
 lto = true
