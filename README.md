@@ -2,9 +2,7 @@
 This is a tool to process logs produced by the [sslkeylog](https://github.com/drivenet/sslkeylog) utility and send them to a MongoDB instance.
 
 ## Building
-`cargo build --release && upx --best target/release/sslkeylog-processor`
-
-[UPX](https://github.com/upx/upx) is used to reduce binary size, if you prefer not using it, just skip it.
+`cargo build --release`
 
 If your build system's glibc is different from the target one, you may encounter the following error:
 ```text
@@ -17,7 +15,7 @@ sudo apt install musl-tools
 rustup target add x86_64-unknown-linux-musl
 ```
 Then just use:
-`cargo build --release --target x86_64-unknown-linux-musl && upx --best target/x86_64-unknown-linux-musl/release/sslkeylog-processor`
+`cargo build --release --target x86_64-unknown-linux-musl`
 
 ## Usage
 Run the built binary to determine the command-line options.
