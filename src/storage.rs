@@ -29,17 +29,13 @@ impl<'a> Store<'a> {
         const DUPLICATE_KEY_ERROR_CODE: i32 = 11000;
         match collection.insert_many(batch).ordered(false).run() {
             Ok(_) => Ok(()),
-            Err(e)
-                if matches!(
-                    e.kind.as_ref(),
-                    mongodb::error::ErrorKind::BulkWrite(f)
-                    if f.write_concern_errors.is_empty()
-                        && f.write_errors.values().all(|b| b.code == DUPLICATE_KEY_ERROR_CODE)
-                ) =>
-            {
-                Ok(())
-            }
-            Err(e) => Err(anyhow!(e)),
+            Err(e) => match e.kind.as_ref() {
+                mongodb::error::ErrorKind::InsertMany(mongodb::error::InsertManyError {
+                    write_errors: Some(errors),
+                    ..
+                }) if errors.iter().all(|b| b.code == DUPLICATE_KEY_ERROR_CODE) => Ok(()),
+                _ => Err(anyhow!(e)),
+            },
         }
     }
 
