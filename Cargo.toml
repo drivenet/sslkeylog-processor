@@ -1,16 +1,16 @@
 [package]
 name = "sslkeylog-processor"
-version = "0.18.5"
+version = "0.18.6"
 authors = ["Aristarkh Zagorodnikov <xm@x-infinity.com>"]
 edition = "2021"
 
 [dependencies]
 anyhow = "1.0.100"
 regex = "1.12.2"
-time = "0.3.46"
+time = "0.3.47"
 # Updating to 3.x is not possible since interaction between mongodb and bson crates is broken WRT time support
 bson = { version = "2.15.0", features = ["time-0_3"] }
-mongodb = { version = "3.5.0", features = ["sync"] }
+mongodb = { version = "3.5.1", features = ["sync"] }
 hex = "0.4.3"
 lazy_static = "1.5.0"
 getopts = "0.2.24"
