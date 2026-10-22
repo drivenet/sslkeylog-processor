@@ -110,7 +110,7 @@ where
             s.find('/').map(|i| &s[i + 1..])
         })
         .map(|s| s.find('?').map(|i| &s[..i]).unwrap_or(s))
-        .and_then(|d| if d.is_empty() { None } else { Some(d) })
+        .filter(|&d| !d.is_empty())
         .ok_or_else(|| anyhow!("Failed to parse database name from connection string"))?
         .to_owned();
 
